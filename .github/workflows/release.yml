@@ -1,0 +1,93 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Déduire la version du tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Compiler et assembler le .app
+        run: VERSION="${{ steps.version.outputs.version }}" ./build.sh release
+
+      - name: Zipper le bundle
+        id: zip
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          ZIP="Handometer-${VERSION}.zip"
+          ditto -c -k --keepParent "Handometer.app" "$ZIP"
+          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
+          echo "size=$(stat -f%z "$ZIP")" >> "$GITHUB_OUTPUT"
+
+      - name: Signer la mise à jour (EdDSA Sparkle)
+        id: sign
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          SIGN_TOOL="$(find .build -type f -name sign_update -not -path '*old_dsa*' | head -1)"
+          # sign_update lit la clé privée depuis stdin via --ed-key-file -
+          SIG_OUTPUT="$(printf '%s' "$SPARKLE_PRIVATE_KEY" | "$SIGN_TOOL" --ed-key-file - "${{ steps.zip.outputs.zip }}")"
+          echo "Signature: $SIG_OUTPUT"
+          # Sortie de la forme : sparkle:edSignature="..." length="..."
+          ED_SIG="$(echo "$SIG_OUTPUT" | sed -E 's/.*sparkle:edSignature="([^"]+)".*/\1/')"
+          echo "edsig=$ED_SIG" >> "$GITHUB_OUTPUT"
+
+      - name: Créer la GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "${{ steps.zip.outputs.zip }}" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes
+
+      - name: Mettre à jour l'appcast
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          ZIP: ${{ steps.zip.outputs.zip }}
+          SIZE: ${{ steps.zip.outputs.size }}
+          EDSIG: ${{ steps.sign.outputs.edsig }}
+        run: |
+          DL_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/${ZIP}"
+          PUBDATE="$(date -u '+%a, %d %b %Y %H:%M:%S +0000')"
+          ITEM=$(cat <<XML
+                  <item>
+                      <title>${GITHUB_REF_NAME}</title>
+                      <pubDate>${PUBDATE}</pubDate>
+                      <sparkle:version>${VERSION}</sparkle:version>
+                      <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
+                      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+                      <enclosure url="${DL_URL}" length="${SIZE}" type="application/octet-stream" sparkle:edSignature="${EDSIG}" />
+                  </item>
+          XML
+          )
+          # Insère le nouvel <item> juste après la balise <language>.
+          python3 - "$ITEM" <<'PY'
+          import sys, re, pathlib
+          item = sys.argv[1]
+          p = pathlib.Path("appcast.xml")
+          xml = p.read_text()
+          xml = xml.replace("</language>", "</language>\n" + item, 1)
+          p.write_text(xml)
+          PY
+
+      - name: Commiter l'appcast
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout main
+          git add appcast.xml
+          git commit -m "chore: appcast pour ${GITHUB_REF_NAME}" || echo "rien à committer"
+          git push origin main
