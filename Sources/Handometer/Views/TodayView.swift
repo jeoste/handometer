@@ -17,9 +17,10 @@ struct TodayView: View {
                         systemImage: "cursorarrow.motionlines"
                     )
                     StatCard(
-                        title: "Keystrokes",
+                        title: "Keystrokes today",
                         value: "\(state.today.totalKeystrokes)",
-                        systemImage: "keyboard"
+                        systemImage: "keyboard",
+                        subtitle: "All time: \(state.totalKeystrokes)"
                     )
                     StatCard(
                         title: "Average speed",
@@ -47,6 +48,14 @@ struct TodayView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     KeyFrequencyView(keyCounts: state.today.keyCounts)
+                }
+
+                if !state.globalKeyCounts.isEmpty {
+                    Text("All-time keys")
+                        .font(.headline)
+                        .padding(.top, 4)
+
+                    KeyFrequencyView(keyCounts: state.globalKeyCounts)
                 }
             }
             .padding()

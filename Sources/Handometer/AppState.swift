@@ -83,6 +83,12 @@ final class AppState: ObservableObject {
     var storageURL: URL { store.storageURL }
     var allDays: [String: DayStats] { store.days }
 
+    /// Nombre total de frappes sur toutes les journées enregistrées.
+    var totalKeystrokes: Int { history.totalKeystrokes }
+
+    /// Compteurs de touches cumulés sur toutes les journées.
+    var globalKeyCounts: [String: Int] { history.aggregatedKeyCounts }
+
     // MARK: - Configuration du moniteur
 
     private func configureMonitor() {
@@ -116,22 +122,27 @@ final class AppState: ObservableObject {
         lastMouseTimestamp = timestamp
 
         store.recordMovement(distanceCm: cm, seconds: seconds, instantKmh: instantKmh, to: currentDayKey)
-        today = store.stats(for: currentDayKey)
+        syncPublishedStats()
         store.scheduleSave()
     }
 
     private func recordClick(_ button: MouseButton) {
         checkDayRollover()
         store.incrementClick(button, in: currentDayKey)
-        today = store.stats(for: currentDayKey)
+        syncPublishedStats()
         store.scheduleSave()
     }
 
     private func recordKey(_ label: String) {
         checkDayRollover()
         store.incrementKey(label, in: currentDayKey)
-        today = store.stats(for: currentDayKey)
+        syncPublishedStats()
         store.scheduleSave()
+    }
+
+    private func syncPublishedStats() {
+        today = store.stats(for: currentDayKey)
+        refreshHistory()
     }
 
     // MARK: - Changement de jour

@@ -49,6 +49,17 @@ struct DayStats: Codable {
         keyCounts.values.reduce(0, +)
     }
 
+    /// Fusionne les compteurs de touches de plusieurs journées.
+    static func aggregatedKeyCounts(from days: some Collection<DayStats>) -> [String: Int] {
+        var merged: [String: Int] = [:]
+        for day in days {
+            for (key, count) in day.keyCounts {
+                merged[key, default: 0] += count
+            }
+        }
+        return merged
+    }
+
     /// Nombre total de clics (gauche + droit + molette).
     var totalClicks: Int {
         leftClicks + rightClicks + middleClicks
@@ -83,6 +94,18 @@ struct DayStats: Codable {
         leftClicks = try c.decodeIfPresent(Int.self, forKey: .leftClicks) ?? 0
         rightClicks = try c.decodeIfPresent(Int.self, forKey: .rightClicks) ?? 0
         middleClicks = try c.decodeIfPresent(Int.self, forKey: .middleClicks) ?? 0
+    }
+}
+
+extension Collection where Element == DayStats {
+    /// Nombre total de frappes sur toutes les journées.
+    var totalKeystrokes: Int {
+        reduce(0) { $0 + $1.totalKeystrokes }
+    }
+
+    /// Compteurs de touches cumulés sur toutes les journées.
+    var aggregatedKeyCounts: [String: Int] {
+        DayStats.aggregatedKeyCounts(from: self)
     }
 }
 

@@ -45,40 +45,100 @@ struct HandometerApp: App {
     }()
 }
 
+/// Instantané des stats affichées dans le menu (rafraîchi périodiquement, pas à
+/// chaque événement souris/clavier, pour éviter les re-rendus qui cassent le
+/// surlignage et les clics dans `MenuBarExtra`).
+private struct MenuBarStatsSnapshot {
+    var mouseDistance = ""
+    var averageSpeed = ""
+    var maxSpeed = ""
+    var clicks = 0
+    var keystrokes = 0
+
+    init() {}
+
+    init(from stats: DayStats) {
+        mouseDistance = TodayView.formatDistance(stats.mouseDistanceCm)
+        averageSpeed = TodayView.formatSpeed(stats.averageSpeedKmh)
+        maxSpeed = TodayView.formatSpeed(stats.maxSpeedKmh)
+        clicks = stats.totalClicks
+        keystrokes = stats.totalKeystrokes
+    }
+}
+
 /// Contenu du menu déroulant de la barre de menu.
 struct MenuBarContent: View {
-    @ObservedObject var state: AppState
-    @ObservedObject var updater: Updater
+    let state: AppState
+    let updater: Updater
     let openDashboard: () -> Void
 
+    @State private var stats = MenuBarStatsSnapshot()
+    @State private var isTrusted = Permissions.isTrusted
+    @State private var needsAccessibilityRegrant = false
+    @State private var launchAtLogin = LoginItem.isEnabled
+    @State private var refreshTimer: Timer?
+
     var body: some View {
-        Text("Today")
-            .font(.headline)
-        Text("Mouse: \(TodayView.formatDistance(state.today.mouseDistanceCm))")
-        Text("Max speed: \(TodayView.formatSpeed(state.today.maxSpeedKmh))")
-        Text("Clicks: \(state.today.totalClicks)")
-        Text("Keystrokes: \(state.today.totalKeystrokes)")
-
-        Divider()
-
-        if state.needsAccessibilityRegrant {
-            Button("⚠︎ Reset Accessibility…") { state.resetAccessibilityPermission() }
-        } else if !state.isTrusted {
-            Button("⚠︎ Grant Accessibility…") { state.requestPermission() }
+        Section {
+            if needsAccessibilityRegrant {
+                Button("⚠︎ Reset Accessibility…") { state.resetAccessibilityPermission() }
+            } else if !isTrusted {
+                Button("⚠︎ Grant Accessibility…") { state.requestPermission() }
+            }
+            Button("Open dashboard…", action: openDashboard)
+            Toggle("Launch at login", isOn: Binding(
+                get: { launchAtLogin },
+                set: { _ in
+                    state.toggleLaunchAtLogin()
+                    launchAtLogin = state.launchAtLogin
+                }
+            ))
+        } header: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Today")
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                Text("Mouse: \(stats.mouseDistance)")
+                Text("Avg speed: \(stats.averageSpeed)")
+                Text("Max speed: \(stats.maxSpeed)")
+                Text("Clicks: \(stats.clicks)")
+                Text("Keystrokes: \(stats.keystrokes)")
+            }
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .textCase(nil)
+            .allowsHitTesting(false)
         }
-        Button("Open dashboard…", action: openDashboard)
-        Toggle("Launch at login", isOn: Binding(
-            get: { state.launchAtLogin },
-            set: { _ in state.toggleLaunchAtLogin() }
-        ))
 
-        Divider()
+        Section {
+            Button("Check for updates…") { updater.checkForUpdates() }
+                .disabled(!updater.canCheckForUpdates)
 
-        Button("Check for updates…") { updater.checkForUpdates() }
-            .disabled(!updater.canCheckForUpdates)
+            Button("Quit") { NSApp.terminate(nil) }
+                .keyboardShortcut("q")
+        }
+        .onAppear { startMenuRefresh() }
+        .onDisappear { stopMenuRefresh() }
+    }
 
-        Button("Quit") { NSApp.terminate(nil) }
-            .keyboardShortcut("q")
+    private func startMenuRefresh() {
+        refreshFromState()
+        refreshTimer?.invalidate()
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+            MainActor.assumeIsolated { refreshFromState() }
+        }
+    }
+
+    private func stopMenuRefresh() {
+        refreshTimer?.invalidate()
+        refreshTimer = nil
+    }
+
+    private func refreshFromState() {
+        stats = MenuBarStatsSnapshot(from: state.today)
+        isTrusted = state.isTrusted
+        needsAccessibilityRegrant = state.needsAccessibilityRegrant
+        launchAtLogin = state.launchAtLogin
     }
 }
 
