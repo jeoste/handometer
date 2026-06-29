@@ -64,6 +64,17 @@ private struct MenuBarStatsSnapshot {
         clicks = stats.totalClicks
         keystrokes = stats.totalKeystrokes
     }
+
+    var headerText: String {
+        """
+        Today
+        Mouse: \(mouseDistance)
+        Avg speed: \(averageSpeed)
+        Max speed: \(maxSpeed)
+        Clicks: \(clicks)
+        Keystrokes: \(keystrokes)
+        """
+    }
 }
 
 /// Contenu du menu déroulant de la barre de menu.
@@ -94,20 +105,13 @@ struct MenuBarContent: View {
                 }
             ))
         } header: {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Today")
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-                Text("Mouse: \(stats.mouseDistance)")
-                Text("Avg speed: \(stats.averageSpeed)")
-                Text("Max speed: \(stats.maxSpeed)")
-                Text("Clicks: \(stats.clicks)")
-                Text("Keystrokes: \(stats.keystrokes)")
-            }
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .textCase(nil)
-            .allowsHitTesting(false)
+            // Un seul Text : plusieurs `Text` dans un menu sont rendus comme
+            // entrées cliquables (surlignage bleu au survol).
+            Text(stats.headerText)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .textCase(nil)
+                .allowsHitTesting(false)
         }
 
         Section {
@@ -134,6 +138,7 @@ struct MenuBarContent: View {
         refreshTimer = nil
     }
 
+    @MainActor
     private func refreshFromState() {
         stats = MenuBarStatsSnapshot(from: state.today)
         isTrusted = state.isTrusted
