@@ -125,11 +125,12 @@ struct MenuBarContent: View {
         .onDisappear { stopMenuRefresh() }
     }
 
+    @MainActor
     private func startMenuRefresh() {
         refreshFromState()
         refreshTimer?.invalidate()
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-            MainActor.assumeIsolated { refreshFromState() }
+            Task { @MainActor in refreshFromState() }
         }
     }
 
