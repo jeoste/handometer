@@ -165,6 +165,19 @@ final class AppState: ObservableObject {
         Permissions.openSettings()
     }
 
+    /// Supprime l'entrée TCC puis rouvre les Réglages pour que l'utilisateur
+    /// puisse réaccorder la permission.
+    func resetAccessibilityPermission() {
+        switch Permissions.resetAccessibilityEntry() {
+        case .success:
+            finishAccessibilityReset()
+        case .cancelled:
+            break
+        case .failed(let message):
+            Permissions.showResetFailure(message)
+        }
+    }
+
     // MARK: - Accessibilité (post-mise à jour)
 
     private func refreshPermissionState() {
@@ -180,9 +193,6 @@ final class AppState: ObservableObject {
         if isTrusted != wasTrusted || isTrusted && monitor.isGlobalKeyMonitorActive != wasKeyActive {
             restartEventMonitor()
         }
-        if needsAccessibilityRegrant {
-            recoverAccessibilityIfNeeded(afterUpdate: false)
-        }
     }
 
     private func restartEventMonitor() {
@@ -194,7 +204,16 @@ final class AppState: ObservableObject {
 
     private func recoverAccessibilityIfNeeded(afterUpdate: Bool) {
         guard needsAccessibilityRegrant else { return }
-        Permissions.promptRegrantIfNeeded(afterUpdate: afterUpdate)
+        guard Permissions.offerAccessibilityReset(afterUpdate: afterUpdate) else { return }
+        resetAccessibilityPermission()
+    }
+
+    private func finishAccessibilityReset() {
+        refreshPermissionState()
+        Permissions.requestIfNeeded()
+        Permissions.openSettings()
+        restartEventMonitor()
+        refreshPermissionState()
     }
 
     func refresh() {

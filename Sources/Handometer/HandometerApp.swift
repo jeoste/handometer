@@ -62,7 +62,7 @@ struct MenuBarContent: View {
         Divider()
 
         if state.needsAccessibilityRegrant {
-            Button("⚠︎ Re-enable Accessibility…") { state.openPermissionSettings() }
+            Button("⚠︎ Reset Accessibility…") { state.resetAccessibilityPermission() }
         } else if !state.isTrusted {
             Button("⚠︎ Grant Accessibility…") { state.requestPermission() }
         }

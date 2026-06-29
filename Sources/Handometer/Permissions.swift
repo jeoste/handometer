@@ -1,6 +1,13 @@
 import AppKit
 import ApplicationServices
 
+/// Résultat d'une tentative de reset TCC Accessibilité.
+enum AccessibilityResetResult {
+    case success
+    case cancelled
+    case failed(String)
+}
+
 /// Gestion de la permission « Accessibilité », requise pour la surveillance
 /// globale du clavier.
 enum Permissions {
@@ -17,6 +24,11 @@ enum Permissions {
         Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? ""
     }
 
+    /// Identifiant du bundle (utilisé par `tccutil`).
+    static var bundleIdentifier: String {
+        Bundle.main.bundleIdentifier ?? "com.jeoste.handometer"
+    }
+
     /// Vérifie l'autorisation et, si nécessaire, affiche la demande système.
     @discardableResult
     static func requestIfNeeded() -> Bool {
@@ -31,6 +43,29 @@ enum Permissions {
         NSWorkspace.shared.open(url)
     }
 
+    /// Supprime l'entrée Accessibilité de Handometer dans TCC (demande le mot de
+    /// passe admin). L'utilisateur pourra ensuite recocher l'app dans les Réglages.
+    static func resetAccessibilityEntry() -> AccessibilityResetResult {
+        let bundleID = bundleIdentifier
+        let script = """
+        do shell script "/usr/bin/tccutil reset Accessibility \(bundleID)" with administrator privileges
+        """
+        var error: NSDictionary?
+        guard let appleScript = NSAppleScript(source: script) else {
+            return .failed("Could not create reset script.")
+        }
+        appleScript.executeAndReturnError(&error)
+        if let error {
+            let code = error[NSAppleScript.errorNumber] as? Int ?? 0
+            if code == -128 {
+                return .cancelled
+            }
+            let message = error[NSAppleScript.errorMessage] as? String ?? "Unknown error"
+            return .failed(message)
+        }
+        return .success
+    }
+
     /// Indique si l'app vient d'être mise à jour depuis le dernier lancement.
     static func consumeVersionChange() -> Bool {
         let current = bundleVersion
@@ -40,32 +75,42 @@ enum Permissions {
         return previous != nil && previous != current
     }
 
-    /// Affiche une fois par version la procédure de réactivation Accessibilité.
-    static func promptRegrantIfNeeded(afterUpdate: Bool) {
+    /// Propose le reset TCC une fois par version (après mise à jour ou permission
+    /// fantôme). Retourne `true` si l'utilisateur a confirmé le reset.
+    static func offerAccessibilityReset(afterUpdate: Bool) -> Bool {
         let version = bundleVersion
-        guard !version.isEmpty else { return }
-        guard UserDefaults.standard.string(forKey: recoveryPromptedVersionKey) != version else { return }
-        UserDefaults.standard.set(version, forKey: recoveryPromptedVersionKey)
-
-        openSettings()
+        guard !version.isEmpty else { return false }
+        guard UserDefaults.standard.string(forKey: recoveryPromptedVersionKey) != version else { return false }
 
         let alert = NSAlert()
         alert.alertStyle = .warning
         if afterUpdate {
-            alert.messageText = "Re-enable Accessibility After Update"
+            alert.messageText = "Reset Accessibility After Update"
             alert.informativeText = """
-            Handometer was updated. macOS sometimes keeps an old Accessibility permission that no longer works.
+            Handometer was updated and macOS kept a stale Accessibility permission that no longer works.
 
-            In System Settings, turn Handometer OFF, then ON again. Keystroke counting will resume immediately.
+            Click Reset Permission to remove it (your Mac password is required), then enable Handometer again in System Settings.
             """
         } else {
-            alert.messageText = "Re-enable Accessibility"
+            alert.messageText = "Reset Accessibility Permission"
             alert.informativeText = """
             Handometer appears authorized but cannot capture keystrokes.
 
-            In System Settings, turn Handometer OFF, then ON again.
+            Click Reset Permission to remove the stale entry (your Mac password is required), then enable Handometer again in System Settings.
             """
         }
+        alert.addButton(withTitle: "Reset Permission")
+        alert.addButton(withTitle: "Later")
+
+        UserDefaults.standard.set(version, forKey: recoveryPromptedVersionKey)
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
+    static func showResetFailure(_ message: String) {
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+        alert.messageText = "Could Not Reset Accessibility"
+        alert.informativeText = message
         alert.addButton(withTitle: "OK")
         alert.runModal()
     }

@@ -51,14 +51,14 @@ struct DashboardView: View {
             Image(systemName: "arrow.triangle.2.circlepath")
                 .foregroundStyle(.orange)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Re-enable Accessibility after update")
+                Text("Reset Accessibility after update")
                     .font(.subheadline.bold())
-                Text("Turn Handometer OFF, then ON again in System Settings.")
+                Text("Removes the stale permission so you can re-enable Handometer.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Button("Open Settings") { state.openPermissionSettings() }
+            Button("Reset Permission") { state.resetAccessibilityPermission() }
         }
         .padding(12)
         .background(.orange.opacity(0.12))
