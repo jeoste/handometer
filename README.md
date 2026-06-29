@@ -1,68 +1,68 @@
 # Handometer
 
-> Un **podomètre pour tes mains** 🖐️ — Handometer mesure, **par jour**, la distance
-> physique parcourue par ton curseur et le nombre de fois que tu appuies sur chaque touche.
+> A **pedometer for your hands** 🖐️ — Handometer tracks, **per day**, the physical
+> distance your cursor travels and how many times you press each key.
 
-- 📏 **Distance souris** en cm réels (taper 5 cm avec la souris = 5 cm comptés).
-- 🏎️ **Vitesse** souris moyenne et maximale en km/h.
-- 🖱️ **Clics** comptés par bouton : gauche, droit et molette (clic central).
-- ⌨️ **Fréquence des touches** : taper « bonjour » → b×1, **o×2**, n×1, j×1, u×1, r×1.
-- 📊 Dashboard du jour + historique en graphiques.
-- 💾 Export CSV / JSON.
-- 🔄 Mises à jour automatiques (Sparkle).
+- 📏 **Mouse distance** in real centimeters (move 5 cm with the mouse = 5 cm counted).
+- 🏎️ **Speed** — average and peak mouse speed in km/h.
+- 🖱️ **Clicks** counted per button: left, right, and middle (scroll wheel click).
+- ⌨️ **Key frequency** — type "hello" → h×1, **e×1**, l×2, o×1.
+- 📊 Today's dashboard + history charts.
+- 💾 CSV / JSON export.
+- 🔄 Automatic updates (Sparkle).
 
-> L'interface de l'app est en **anglais**.
+> The app UI is in **English**.
 
-Tout reste **100 % local et privé** : seuls des compteurs par caractère sont
-stockés — jamais les mots ni l'ordre des frappes.
+Everything stays **100% local and private**: only per-character counters are
+stored — never the words you type or the order of keystrokes.
 
 ## Installation
 
-1. Télécharge la dernière version sur la [page Releases](https://github.com/jeoste/handometer/releases).
-2. Dézippe et glisse `Handometer.app` dans `/Applications`.
-3. **Premier lancement** — l'app n'est pas signée par Apple, donc macOS la bloque.
-   Fais un **clic-droit sur l'app ▸ Ouvrir**, puis confirme. (À ne faire qu'une fois.)
-   - Alternative en terminal : `xattr -dr com.apple.quarantine /Applications/Handometer.app`
-4. macOS demande la permission **Accessibilité** (indispensable pour compter les
-   frappes) : *Réglages Système ▸ Confidentialité et sécurité ▸ Accessibilité* →
-   active **Handometer**, puis relance l'app.
+1. Download the latest version from the [Releases page](https://github.com/jeoste/handometer/releases).
+2. Unzip and drag `Handometer.app` into `/Applications`.
+3. **First launch** — the app is not signed by Apple, so macOS will block it.
+   **Right-click the app ▸ Open**, then confirm. (Only needed once.)
+   - Terminal alternative: `xattr -dr com.apple.quarantine /Applications/Handometer.app`
+4. macOS will ask for **Accessibility** permission (required to count keystrokes):
+   *System Settings ▸ Privacy & Security ▸ Accessibility* → enable **Handometer**,
+   then relaunch the app.
 
-L'icône apparaît dans la **barre de menu** (pas dans le Dock). Clique dessus pour
-voir tes stats ou ouvrir le dashboard.
+The icon appears in the **menu bar** (not the Dock). Click it to see your stats
+or open the dashboard.
 
-## Compilation depuis les sources
+## Building from source
 
-Prérequis : macOS 13+ et la toolchain Swift.
+Requirements: macOS 13+ and the Swift toolchain.
 
 ```bash
-./build.sh            # produit Handometer.app (version par défaut)
-VERSION=1.2.3 ./build.sh   # avec une version précise
+./build.sh            # produces Handometer.app (default version)
+VERSION=1.2.3 ./build.sh   # with a specific version
 open Handometer.app
 ```
 
-## Comment ça marche
+## How it works
 
-- Surveillance via `NSEvent` (moniteurs global + local).
-- Conversion pixels → cm grâce à `CGDisplayScreenSize` (taille physique de
-  l'écran), calculée par moniteur (multi-écrans gérés).
-- Persistance JSON dans `~/Library/Application Support/Handometer/stats.json`.
-- Auto-update via [Sparkle](https://sparkle-project.org) et un flux `appcast.xml`.
+- Monitoring via `NSEvent` (global + local monitors).
+- Pixel → cm conversion using `CGDisplayScreenSize` (physical screen size),
+  calculated per display (multi-monitor supported).
+- JSON persistence in `~/Library/Application Support/Handometer/stats.json`.
+- Auto-update via [Sparkle](https://sparkle-project.org) and an `appcast.xml` feed.
 
-## Releases & mises à jour
+## Releases & updates
 
-Chaque push sur `main` déclenche automatiquement le workflow
-[`.github/workflows/release.yml`](.github/workflows/release.yml) : il incrémente
-le numéro de version (patch), compile l'app, signe l'archive (EdDSA Sparkle),
-publie une [GitHub Release](https://github.com/jeoste/handometer/releases) et
-met à jour `appcast.xml`.
+Every push to `main` automatically triggers the
+[`.github/workflows/release.yml`](.github/workflows/release.yml) workflow: it
+bumps the version number (patch), builds the app, signs the archive (Sparkle
+EdDSA), publishes a [GitHub Release](https://github.com/jeoste/handometer/releases),
+and updates `appcast.xml`.
 
-Les apps installées détectent les mises à jour via Sparkle (menu barre →
-**Check for updates…**). Le flux lit `appcast.xml` sur `main` et télécharge le
-zip depuis la GitHub Release correspondante.
+Installed apps detect updates via Sparkle (menu bar → **Check for updates…**).
+The feed reads `appcast.xml` on `main` and downloads the zip from the matching
+GitHub Release.
 
-> L'auto-update ne fonctionne qu'avec un bundle `.app` complet (build via
-> `./build.sh` ou release téléchargée), pas avec `swift run`.
+> Auto-update only works with a complete `.app` bundle (built via `./build.sh` or
+> downloaded from a release), not with `swift run`.
 
-## Licence
+## License
 
 [MIT](LICENSE).

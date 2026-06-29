@@ -61,7 +61,9 @@ struct MenuBarContent: View {
 
         Divider()
 
-        if !state.isTrusted {
+        if state.needsAccessibilityRegrant {
+            Button("⚠︎ Re-enable Accessibility…") { state.openPermissionSettings() }
+        } else if !state.isTrusted {
             Button("⚠︎ Grant Accessibility…") { state.requestPermission() }
         }
         Button("Open dashboard…", action: openDashboard)

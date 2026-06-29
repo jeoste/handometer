@@ -7,7 +7,9 @@ struct DashboardView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if !state.isTrusted {
+            if state.needsAccessibilityRegrant {
+                accessibilityRegrantBanner
+            } else if !state.isTrusted {
                 permissionBanner
             }
 
@@ -34,6 +36,24 @@ struct DashboardView: View {
                 Text("Accessibility permission required")
                     .font(.subheadline.bold())
                 Text("Without it, keystrokes and clicks can't be counted.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Open Settings") { state.openPermissionSettings() }
+        }
+        .padding(12)
+        .background(.orange.opacity(0.12))
+    }
+
+    private var accessibilityRegrantBanner: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Re-enable Accessibility after update")
+                    .font(.subheadline.bold())
+                Text("Turn Handometer OFF, then ON again in System Settings.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

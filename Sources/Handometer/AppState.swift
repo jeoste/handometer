@@ -16,8 +16,11 @@ final class AppState: ObservableObject {
     /// Historique trié par date croissante (pour les graphiques).
     @Published private(set) var history: [DayStats] = []
 
-    /// État de la permission Accessibilité.
+    /// État de la permission Accessibilité (TCC).
     @Published var isTrusted: Bool = Permissions.isTrusted
+    /// Permission TCC accordée mais moniteur clavier inactif (souvent après une
+    /// mise à jour avec signature ad-hoc différente).
+    @Published private(set) var needsAccessibilityRegrant = false
     /// État du démarrage auto.
     @Published var launchAtLogin: Bool = LoginItem.isEnabled
 
@@ -44,6 +47,13 @@ final class AppState: ObservableObject {
         guard !isRunning else { return }
         isRunning = true
         monitor.start()
+        refreshPermissionState()
+
+        let didUpdate = Permissions.consumeVersionChange()
+        if didUpdate {
+            restartEventMonitor()
+        }
+        recoverAccessibilityIfNeeded(afterUpdate: didUpdate)
 
         // Sauvegarde garantie à la fermeture de l'app.
         NotificationCenter.default.addObserver(
@@ -59,7 +69,7 @@ final class AppState: ObservableObject {
             MainActor.assumeIsolated { self?.checkDayRollover() }
         }
         permissionTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.isTrusted = Permissions.isTrusted }
+            MainActor.assumeIsolated { self?.pollPermissionState() }
         }
     }
 
@@ -147,11 +157,44 @@ final class AppState: ObservableObject {
 
     func requestPermission() {
         Permissions.requestIfNeeded()
-        isTrusted = Permissions.isTrusted
+        restartEventMonitor()
+        recoverAccessibilityIfNeeded(afterUpdate: false)
     }
 
     func openPermissionSettings() {
         Permissions.openSettings()
+    }
+
+    // MARK: - Accessibilité (post-mise à jour)
+
+    private func refreshPermissionState() {
+        isTrusted = Permissions.isTrusted
+        needsAccessibilityRegrant = isTrusted && !monitor.isGlobalKeyMonitorActive
+    }
+
+    private func pollPermissionState() {
+        let wasTrusted = isTrusted
+        let wasKeyActive = monitor.isGlobalKeyMonitorActive
+        refreshPermissionState()
+
+        if isTrusted != wasTrusted || isTrusted && monitor.isGlobalKeyMonitorActive != wasKeyActive {
+            restartEventMonitor()
+        }
+        if needsAccessibilityRegrant {
+            recoverAccessibilityIfNeeded(afterUpdate: false)
+        }
+    }
+
+    private func restartEventMonitor() {
+        guard isRunning else { return }
+        monitor.stop()
+        monitor.start()
+        refreshPermissionState()
+    }
+
+    private func recoverAccessibilityIfNeeded(afterUpdate: Bool) {
+        guard needsAccessibilityRegrant else { return }
+        Permissions.promptRegrantIfNeeded(afterUpdate: afterUpdate)
     }
 
     func refresh() {

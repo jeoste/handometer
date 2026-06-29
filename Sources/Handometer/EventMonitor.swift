@@ -25,6 +25,10 @@ final class EventMonitor {
     /// Appelé pour chaque frappe : libellé de la touche.
     var onKeyDown: ((String) -> Void)?
 
+    /// Indique si le moniteur global clavier est actif (preuve que la permission
+    /// Accessibilité fonctionne réellement, pas seulement selon TCC).
+    private(set) var isGlobalKeyMonitorActive = false
+
     private let mouseMask: NSEvent.EventTypeMask = [
         .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged
     ]
@@ -34,6 +38,7 @@ final class EventMonitor {
     private let keyMask: NSEvent.EventTypeMask = [.keyDown]
 
     func start() {
+        stop()
         let allMask = mouseMask.union(clickMask).union(keyMask)
 
         // Global : événements des autres applications.
@@ -51,6 +56,7 @@ final class EventMonitor {
             self?.handleKey($0)
         }) {
             globalMonitors.append(m)
+            isGlobalKeyMonitorActive = true
         }
 
         // Local : événements destinés à notre propre fenêtre (dashboard ouvert).
@@ -73,6 +79,7 @@ final class EventMonitor {
         globalMonitors.removeAll()
         if let m = localMonitor { NSEvent.removeMonitor(m) }
         localMonitor = nil
+        isGlobalKeyMonitorActive = false
     }
 
     // MARK: - Handlers
