@@ -56,10 +56,10 @@ final class AppState: ObservableObject {
 
         // Vérifie périodiquement le changement de jour et l'état des permissions.
         dayCheckTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.checkDayRollover() }
+            MainActor.assumeIsolated { self?.checkDayRollover() }
         }
         permissionTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.isTrusted = Permissions.isTrusted }
+            MainActor.assumeIsolated { self?.isTrusted = Permissions.isTrusted }
         }
     }
 
