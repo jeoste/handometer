@@ -6,6 +6,7 @@ import Combine
 @MainActor
 final class AppState: ObservableObject {
     private let store = StatsStore()
+    private let achievementStore = AchievementStore()
     private let monitor = EventMonitor()
     private let metrics = DisplayMetrics()
 
@@ -23,8 +24,13 @@ final class AppState: ObservableObject {
     @Published private(set) var needsAccessibilityRegrant = false
     /// État du démarrage auto.
     @Published var launchAtLogin: Bool = LoginItem.isEnabled
+    /// Achievements débloqués (tous scopes).
+    @Published private(set) var achievements: [UnlockedAchievement] = []
+    /// Dernier unlock en attente d'affichage (bannière / preview).
+    @Published var pendingUnlock: UnlockedAchievement?
 
     private var dayCheckTimer: Timer?
+    private var bannerDismissWorkItem: DispatchWorkItem?
     private var permissionTimer: Timer?
     private var isRunning = false
 
@@ -40,6 +46,13 @@ final class AppState: ObservableObject {
         let key = Date().dayKey
         self.today = store.stats(for: key)
         refreshHistory()
+        syncAchievementsFromStore()
+        _ = achievementStore.retroactiveScan(
+            history: history,
+            globalKeyCounts: globalKeyCounts,
+            currentDayKey: key
+        )
+        syncAchievementsFromStore()
         configureMonitor()
     }
 
@@ -78,6 +91,7 @@ final class AppState: ObservableObject {
         dayCheckTimer?.invalidate()
         permissionTimer?.invalidate()
         store.saveNow()
+        achievementStore.saveNow()
     }
 
     var storageURL: URL { store.storageURL }
@@ -143,6 +157,52 @@ final class AppState: ObservableObject {
     private func syncPublishedStats() {
         today = store.stats(for: currentDayKey)
         refreshHistory()
+        evaluateAchievements()
+    }
+
+    private func syncAchievementsFromStore() {
+        achievements = achievementStore.unlocks.sorted { $0.unlockedAt > $1.unlockedAt }
+    }
+
+    func achievements(for scope: AchievementScope) -> [UnlockedAchievement] {
+        achievementStore.unlocks(for: scope, dayKey: currentDayKey)
+    }
+
+    func dismissPendingUnlock() {
+        bannerDismissWorkItem?.cancel()
+        pendingUnlock = nil
+    }
+
+    private func evaluateAchievements() {
+        let newUnlocks = AchievementEvaluator.evaluate(
+            today: today,
+            history: history,
+            globalKeyCounts: globalKeyCounts,
+            alreadyUnlocked: achievementStore.unlocks,
+            currentDayKey: currentDayKey
+        )
+        let added = achievementStore.add(newUnlocks, dayKey: currentDayKey)
+        guard !added.isEmpty else { return }
+
+        syncAchievementsFromStore()
+
+        for unlock in added {
+            AchievementNotifier.notify(unlock: unlock)
+        }
+
+        if let latest = added.last {
+            pendingUnlock = latest
+            scheduleBannerDismiss()
+        }
+    }
+
+    private func scheduleBannerDismiss() {
+        bannerDismissWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.pendingUnlock = nil
+        }
+        bannerDismissWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: work)
     }
 
     // MARK: - Changement de jour

@@ -13,12 +13,23 @@ struct DashboardView: View {
                 permissionBanner
             }
 
+            if let unlock = state.pendingUnlock {
+                AchievementUnlockBanner(
+                    unlock: unlock,
+                    onShare: { AchievementSharer.shareOnX(unlock: unlock) },
+                    onDismiss: { state.dismissPendingUnlock() }
+                )
+            }
+
             TabView {
                 TodayView(state: state)
                     .tabItem { Label("Today", systemImage: "calendar") }
 
                 HistoryChartView(history: state.history)
                     .tabItem { Label("History", systemImage: "chart.bar.xaxis") }
+
+                AchievementsView(state: state)
+                    .tabItem { Label("Achievements", systemImage: "trophy.fill") }
             }
 
             Divider()
