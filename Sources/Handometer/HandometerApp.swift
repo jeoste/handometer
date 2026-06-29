@@ -50,7 +50,6 @@ struct HandometerApp: App {
 /// surlignage et les clics dans `MenuBarExtra`).
 private struct MenuBarStatsSnapshot {
     var mouseDistance = ""
-    var averageSpeed = ""
     var maxSpeed = ""
     var clicks = 0
     var keystrokes = 0
@@ -59,21 +58,9 @@ private struct MenuBarStatsSnapshot {
 
     init(from stats: DayStats) {
         mouseDistance = TodayView.formatDistance(stats.mouseDistanceCm)
-        averageSpeed = TodayView.formatSpeed(stats.averageSpeedKmh)
         maxSpeed = TodayView.formatSpeed(stats.maxSpeedKmh)
         clicks = stats.totalClicks
         keystrokes = stats.totalKeystrokes
-    }
-
-    var headerText: String {
-        """
-        Today
-        Mouse: \(mouseDistance)
-        Avg speed: \(averageSpeed)
-        Max speed: \(maxSpeed)
-        Clicks: \(clicks)
-        Keystrokes: \(keystrokes)
-        """
     }
 }
 
@@ -90,7 +77,21 @@ struct MenuBarContent: View {
     @State private var refreshTimer: Timer?
 
     var body: some View {
-        Section {
+        Group {
+            Button("Today") {}
+                .font(.headline)
+                .disabled(true)
+            Button("Mouse: \(stats.mouseDistance)") {}
+                .disabled(true)
+            Button("Max speed: \(stats.maxSpeed)") {}
+                .disabled(true)
+            Button("Clicks: \(stats.clicks)") {}
+                .disabled(true)
+            Button("Keystrokes: \(stats.keystrokes)") {}
+                .disabled(true)
+
+            Divider()
+
             if needsAccessibilityRegrant {
                 Button("⚠︎ Reset Accessibility…") { state.resetAccessibilityPermission() }
             } else if !isTrusted {
@@ -104,17 +105,9 @@ struct MenuBarContent: View {
                     launchAtLogin = state.launchAtLogin
                 }
             ))
-        } header: {
-            // Un seul Text : plusieurs `Text` dans un menu sont rendus comme
-            // entrées cliquables (surlignage bleu au survol).
-            Text(stats.headerText)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .textCase(nil)
-                .allowsHitTesting(false)
-        }
 
-        Section {
+            Divider()
+
             Button("Check for updates…") { updater.checkForUpdates() }
                 .disabled(!updater.canCheckForUpdates)
 
