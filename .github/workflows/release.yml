@@ -1,9 +1,18 @@
 name: Release
 
+# Chaque push sur main publie automatiquement une nouvelle release et met à
+# jour l'appcast Sparkle (ce qui déclenche la mise à jour des apps installées).
+# La version est auto-incrémentée (patch) à partir du dernier tag `v*`.
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
+
+# Évite les exécutions concurrentes : un seul release-train à la fois (sinon
+# deux runs pourraient calculer le même numéro de version / se marcher dessus).
+concurrency:
+  group: release-main
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -12,12 +21,33 @@ jobs:
   release:
     runs-on: macos-14
     steps:
-      - name: Checkout
+      - name: Checkout (avec tags)
         uses: actions/checkout@v4
+        with:
+          # Historique complet + tags nécessaires au calcul de version.
+          fetch-depth: 0
+          fetch-tags: true
 
-      - name: Déduire la version du tag
+      - name: Calculer la prochaine version (patch +1)
         id: version
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        run: |
+          LATEST="$(git tag -l 'v*' --sort=-v:refname | head -1)"
+          if [ -z "$LATEST" ]; then
+            NEXT="1.0.1"
+          else
+            VER="${LATEST#v}"
+            MAJOR="${VER%%.*}"
+            REST="${VER#*.}"
+            MINOR="${REST%%.*}"
+            PATCH="${REST#*.}"
+            # Garde-fous si un composant manque (ex. tag "v1" ou "v1.2").
+            MAJOR="${MAJOR:-1}"; MINOR="${MINOR:-0}"; PATCH="${PATCH:-0}"
+            PATCH=$((PATCH + 1))
+            NEXT="${MAJOR}.${MINOR}.${PATCH}"
+          fi
+          echo "Dernier tag: ${LATEST:-<aucun>} → nouvelle version: ${NEXT}"
+          echo "version=${NEXT}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${NEXT}" >> "$GITHUB_OUTPUT"
 
       - name: Compiler et assembler le .app
         run: VERSION="${{ steps.version.outputs.version }}" ./build.sh release
@@ -44,27 +74,19 @@ jobs:
           ED_SIG="$(echo "$SIG_OUTPUT" | sed -E 's/.*sparkle:edSignature="([^"]+)".*/\1/')"
           echo "edsig=$ED_SIG" >> "$GITHUB_OUTPUT"
 
-      - name: Créer la GitHub Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create "$GITHUB_REF_NAME" \
-            "${{ steps.zip.outputs.zip }}" \
-            --title "$GITHUB_REF_NAME" \
-            --generate-notes
-
       - name: Mettre à jour l'appcast
         env:
+          TAG: ${{ steps.version.outputs.tag }}
           VERSION: ${{ steps.version.outputs.version }}
           ZIP: ${{ steps.zip.outputs.zip }}
           SIZE: ${{ steps.zip.outputs.size }}
           EDSIG: ${{ steps.sign.outputs.edsig }}
         run: |
-          DL_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/${ZIP}"
+          DL_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${ZIP}"
           PUBDATE="$(date -u '+%a, %d %b %Y %H:%M:%S +0000')"
           ITEM=$(cat <<XML
                   <item>
-                      <title>${GITHUB_REF_NAME}</title>
+                      <title>${TAG}</title>
                       <pubDate>${PUBDATE}</pubDate>
                       <sparkle:version>${VERSION}</sparkle:version>
                       <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
@@ -75,7 +97,7 @@ jobs:
           )
           # Insère le nouvel <item> juste après la balise <language>.
           python3 - "$ITEM" <<'PY'
-          import sys, re, pathlib
+          import sys, pathlib
           item = sys.argv[1]
           p = pathlib.Path("appcast.xml")
           xml = p.read_text()
@@ -83,11 +105,25 @@ jobs:
           p.write_text(xml)
           PY
 
-      - name: Commiter l'appcast
+      - name: Commiter l'appcast ([skip ci] pour éviter une boucle)
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout main
           git add appcast.xml
-          git commit -m "chore: appcast pour ${GITHUB_REF_NAME}" || echo "rien à committer"
-          git push origin main
+          # [skip ci] empêche ce commit de re-déclencher le workflow.
+          git commit -m "chore: appcast pour ${{ steps.version.outputs.tag }} [skip ci]" || echo "rien à committer"
+          git push origin HEAD:main
+
+      - name: Créer le tag de version
+        run: |
+          git tag "${{ steps.version.outputs.tag }}"
+          git push origin "${{ steps.version.outputs.tag }}"
+
+      - name: Créer la GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" \
+            "${{ steps.zip.outputs.zip }}" \
+            --title "${{ steps.version.outputs.tag }}" \
+            --generate-notes
