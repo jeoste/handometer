@@ -19,8 +19,8 @@ final class AppState: ObservableObject {
 
     /// État de la permission Accessibilité (TCC).
     @Published var isTrusted: Bool = Permissions.isTrusted
-    /// Permission TCC accordée mais moniteur clavier inactif (souvent après une
-    /// mise à jour avec signature ad-hoc différente).
+    /// Souris globale active mais pas le clavier : permission TCC obsolète ou
+    /// binaire différent de celui autorisé (rebuild ad-hoc, copie multiple).
     @Published private(set) var needsAccessibilityRegrant = false
     /// État du démarrage auto.
     @Published var launchAtLogin: Bool = LoginItem.isEnabled
@@ -253,7 +253,10 @@ final class AppState: ObservableObject {
 
     private func refreshPermissionState() {
         isTrusted = Permissions.isTrusted
-        needsAccessibilityRegrant = isTrusted && !monitor.isGlobalKeyMonitorActive
+        // Souris globale OK mais pas le clavier : permission TCC fantôme
+        // (souvent après déplacement, rebuild ad-hoc, ou copie multiple).
+        needsAccessibilityRegrant = monitor.isGlobalMouseMonitorActive
+            && !monitor.isGlobalKeyMonitorActive
     }
 
     private func pollPermissionState() {

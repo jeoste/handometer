@@ -25,6 +25,9 @@ final class EventMonitor {
     /// Appelé pour chaque frappe : libellé de la touche.
     var onKeyDown: ((String) -> Void)?
 
+    /// Indique si le moniteur global souris est actif (ne nécessite pas
+    /// Accessibilité).
+    private(set) var isGlobalMouseMonitorActive = false
     /// Indique si le moniteur global clavier est actif (preuve que la permission
     /// Accessibilité fonctionne réellement, pas seulement selon TCC).
     private(set) var isGlobalKeyMonitorActive = false
@@ -46,6 +49,7 @@ final class EventMonitor {
             self?.handleMouse($0)
         }) {
             globalMonitors.append(m)
+            isGlobalMouseMonitorActive = true
         }
         if let m = NSEvent.addGlobalMonitorForEvents(matching: clickMask, handler: { [weak self] in
             self?.handleClick($0)
@@ -79,6 +83,7 @@ final class EventMonitor {
         globalMonitors.removeAll()
         if let m = localMonitor { NSEvent.removeMonitor(m) }
         localMonitor = nil
+        isGlobalMouseMonitorActive = false
         isGlobalKeyMonitorActive = false
     }
 
