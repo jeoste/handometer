@@ -65,10 +65,25 @@ final class StatsStore {
         days[dayKey] ?? DayStats(date: dayKey)
     }
 
-    /// Ajoute une distance (cm) au jour indiqué.
-    func addDistance(_ cm: Double, to dayKey: String) {
+    /// Enregistre un segment de déplacement souris : distance (cm), durée du
+    /// segment (s) et vitesse instantanée (km/h). Met à jour la distance
+    /// cumulée, le temps de déplacement (pour la moyenne) et la vitesse max.
+    func recordMovement(distanceCm: Double, seconds: Double, instantKmh: Double, to dayKey: String) {
         var d = stats(for: dayKey)
-        d.mouseDistanceCm += cm
+        d.mouseDistanceCm += distanceCm
+        if seconds > 0 { d.movementSeconds += seconds }
+        if instantKmh > d.maxSpeedKmh { d.maxSpeedKmh = instantKmh }
+        days[dayKey] = d
+    }
+
+    /// Incrémente le compteur de clics du bouton indiqué pour le jour donné.
+    func incrementClick(_ button: MouseButton, in dayKey: String) {
+        var d = stats(for: dayKey)
+        switch button {
+        case .left:   d.leftClicks += 1
+        case .right:  d.rightClicks += 1
+        case .middle: d.middleClicks += 1
+        }
         days[dayKey] = d
     }
 

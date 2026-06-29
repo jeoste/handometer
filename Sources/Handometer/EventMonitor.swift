@@ -1,6 +1,14 @@
 import AppKit
 
-/// Surveille globalement les mouvements de souris et les frappes clavier.
+/// Bouton de souris cliqué.
+enum MouseButton {
+    case left
+    case right
+    case middle
+}
+
+/// Surveille globalement les mouvements de souris, les clics et les frappes
+/// clavier.
 ///
 /// Utilise à la fois un *global monitor* (événements destinés aux autres apps)
 /// et un *local monitor* (événements destinés à notre propre app) afin de ne
@@ -9,20 +17,33 @@ final class EventMonitor {
     private var globalMonitors: [Any] = []
     private var localMonitor: Any?
 
-    /// Appelé pour chaque segment de déplacement souris : (distance px, point global).
-    var onMouseMove: ((Double, CGPoint) -> Void)?
+    /// Appelé pour chaque segment de déplacement souris :
+    /// (distance px, point global, horodatage en secondes).
+    var onMouseMove: ((Double, CGPoint, TimeInterval) -> Void)?
+    /// Appelé pour chaque clic souris : bouton concerné.
+    var onMouseClick: ((MouseButton) -> Void)?
     /// Appelé pour chaque frappe : libellé de la touche.
     var onKeyDown: ((String) -> Void)?
 
     private let mouseMask: NSEvent.EventTypeMask = [
         .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged
     ]
+    private let clickMask: NSEvent.EventTypeMask = [
+        .leftMouseDown, .rightMouseDown, .otherMouseDown
+    ]
     private let keyMask: NSEvent.EventTypeMask = [.keyDown]
 
     func start() {
+        let allMask = mouseMask.union(clickMask).union(keyMask)
+
         // Global : événements des autres applications.
         if let m = NSEvent.addGlobalMonitorForEvents(matching: mouseMask, handler: { [weak self] in
             self?.handleMouse($0)
+        }) {
+            globalMonitors.append(m)
+        }
+        if let m = NSEvent.addGlobalMonitorForEvents(matching: clickMask, handler: { [weak self] in
+            self?.handleClick($0)
         }) {
             globalMonitors.append(m)
         }
@@ -33,11 +54,15 @@ final class EventMonitor {
         }
 
         // Local : événements destinés à notre propre fenêtre (dashboard ouvert).
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: mouseMask.union(keyMask)) { [weak self] event in
-            if self?.mouseMask.contains(NSEvent.EventTypeMask(type: event.type)) == true {
-                self?.handleMouse(event)
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: allMask) { [weak self] event in
+            guard let self else { return event }
+            let type = NSEvent.EventTypeMask(type: event.type)
+            if self.mouseMask.contains(type) {
+                self.handleMouse(event)
+            } else if self.clickMask.contains(type) {
+                self.handleClick(event)
             } else if event.type == .keyDown {
-                self?.handleKey(event)
+                self.handleKey(event)
             }
             return event
         }
@@ -57,7 +82,24 @@ final class EventMonitor {
         let dy = event.deltaY
         let distance = (dx * dx + dy * dy).squareRoot()
         guard distance > 0 else { return }
-        onMouseMove?(distance, NSEvent.mouseLocation)
+        onMouseMove?(distance, NSEvent.mouseLocation, event.timestamp)
+    }
+
+    private func handleClick(_ event: NSEvent) {
+        switch event.type {
+        case .leftMouseDown:
+            onMouseClick?(.left)
+        case .rightMouseDown:
+            onMouseClick?(.right)
+        case .otherMouseDown:
+            // Bouton 2 = molette (clic central). Les autres boutons auxiliaires
+            // (précédent/suivant…) sont ignorés.
+            if event.buttonNumber == 2 {
+                onMouseClick?(.middle)
+            }
+        default:
+            break
+        }
     }
 
     private func handleKey(_ event: NSEvent) {
@@ -86,20 +128,20 @@ final class EventMonitor {
 
     /// Libellés pour les touches non imprimables, indexés par `keyCode`.
     private static let specialKeyLabels: [UInt16: String] = [
-        49:  "⎵ Espace",
-        36:  "↩ Entrée",
-        76:  "↩ Entrée",      // Enter du pavé numérique
+        49:  "⎵ Space",
+        36:  "↩ Enter",
+        76:  "↩ Enter",       // Enter du pavé numérique
         48:  "⇥ Tab",
-        51:  "⌫ Retour arrière",
-        117: "⌦ Suppr",
-        53:  "⎋ Échap",
-        123: "← Gauche",
-        124: "→ Droite",
-        125: "↓ Bas",
-        126: "↑ Haut",
-        115: "↖ Début",
-        119: "↘ Fin",
-        116: "⇞ Page haut",
-        121: "⇟ Page bas"
+        51:  "⌫ Backspace",
+        117: "⌦ Delete",
+        53:  "⎋ Esc",
+        123: "← Left",
+        124: "→ Right",
+        125: "↓ Down",
+        126: "↑ Up",
+        115: "↖ Home",
+        119: "↘ End",
+        116: "⇞ Page Up",
+        121: "⇟ Page Down"
     ]
 }

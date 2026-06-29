@@ -16,8 +16,8 @@ struct KeyFrequencyView: View {
     var body: some View {
         Chart(topKeys, id: \.key) { item in
             BarMark(
-                x: .value("Frappes", item.count),
-                y: .value("Touche", item.key)
+                x: .value("Keystrokes", item.count),
+                y: .value("Key", item.key)
             )
             .annotation(position: .trailing) {
                 Text("\(item.count)")

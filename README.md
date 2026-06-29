@@ -4,10 +4,14 @@
 > physique parcourue par ton curseur et le nombre de fois que tu appuies sur chaque touche.
 
 - 📏 **Distance souris** en cm réels (taper 5 cm avec la souris = 5 cm comptés).
+- 🏎️ **Vitesse** souris moyenne et maximale en km/h.
+- 🖱️ **Clics** comptés par bouton : gauche, droit et molette (clic central).
 - ⌨️ **Fréquence des touches** : taper « bonjour » → b×1, **o×2**, n×1, j×1, u×1, r×1.
 - 📊 Dashboard du jour + historique en graphiques.
 - 💾 Export CSV / JSON.
 - 🔄 Mises à jour automatiques (Sparkle).
+
+> L'interface de l'app est en **anglais**.
 
 Tout reste **100 % local et privé** : seuls des compteurs par caractère sont
 stockés — jamais les mots ni l'ordre des frappes.

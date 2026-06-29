@@ -31,6 +31,10 @@ mkdir -p "${APP_DIR}/Contents/Frameworks"
 
 cp "$BIN_PATH" "${APP_DIR}/Contents/MacOS/${EXEC_NAME}"
 
+# Icône d'app (.icns) + images de la barre de menu (template monochrome).
+cp Resources/AppIcon.icns "${APP_DIR}/Contents/Resources/AppIcon.icns"
+cp Resources/menubar.png Resources/menubar@2x.png "${APP_DIR}/Contents/Resources/"
+
 # Copie Sparkle.framework dans le bundle (le binaire le résout via @rpath).
 SPARKLE_FW="$(find .build -type d -name "Sparkle.framework" -path "*macos*" 2>/dev/null | head -1)"
 if [ -z "$SPARKLE_FW" ]; then
@@ -54,6 +58,8 @@ cat > "${APP_DIR}/Contents/Info.plist" <<PLIST
     <string>${APP_NAME}</string>
     <key>CFBundleExecutable</key>
     <string>${EXEC_NAME}</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
     <string>${BUNDLE_ID}</string>
     <key>CFBundleVersion</key>

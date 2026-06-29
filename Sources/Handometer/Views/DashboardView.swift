@@ -13,10 +13,10 @@ struct DashboardView: View {
 
             TabView {
                 TodayView(state: state)
-                    .tabItem { Label("Aujourd'hui", systemImage: "calendar") }
+                    .tabItem { Label("Today", systemImage: "calendar") }
 
                 HistoryChartView(history: state.history)
-                    .tabItem { Label("Historique", systemImage: "chart.bar.xaxis") }
+                    .tabItem { Label("History", systemImage: "chart.bar.xaxis") }
             }
 
             Divider()
@@ -31,14 +31,14 @@ struct DashboardView: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Permission Accessibilité requise")
+                Text("Accessibility permission required")
                     .font(.subheadline.bold())
-                Text("Sans elle, les frappes clavier ne peuvent pas être comptées.")
+                Text("Without it, keystrokes and clicks can't be counted.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Button("Ouvrir les Réglages") { state.openPermissionSettings() }
+            Button("Open Settings") { state.openPermissionSettings() }
         }
         .padding(12)
         .background(.orange.opacity(0.12))
@@ -46,7 +46,7 @@ struct DashboardView: View {
 
     private var footer: some View {
         HStack {
-            Toggle("Démarrer à la connexion", isOn: Binding(
+            Toggle("Launch at login", isOn: Binding(
                 get: { state.launchAtLogin },
                 set: { _ in state.toggleLaunchAtLogin() }
             ))

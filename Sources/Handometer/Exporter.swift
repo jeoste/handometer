@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 /// Export des statistiques vers CSV ou JSON via un panneau d'enregistrement.
 enum Exporter {
     static func exportJSON(days: [String: DayStats]) {
-        let panel = savePanel(suggestedName: "macbook-stats.json", type: .json)
+        let panel = savePanel(suggestedName: "handometer-stats.json", type: .json)
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             let encoder = JSONEncoder()
@@ -17,17 +17,32 @@ enum Exporter {
     }
 
     static func exportCSV(days: [String: DayStats]) {
-        let panel = savePanel(suggestedName: "macbook-stats.csv", type: .commaSeparatedText)
+        let panel = savePanel(suggestedName: "handometer-stats.csv", type: .commaSeparatedText)
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
         let sorted = days.values.sorted { $0.date < $1.date }
         // Colonnes de touches = union de toutes les touches rencontrées, triées.
         let allKeys = Set(sorted.flatMap { $0.keyCounts.keys }).sorted()
 
+        let fixedColumns = [
+            "date", "distance_cm",
+            "avg_speed_kmh", "max_speed_kmh",
+            "left_clicks", "right_clicks", "middle_clicks", "total_clicks"
+        ]
+
         var rows: [String] = []
-        rows.append((["date", "distance_cm"] + allKeys).map(csvEscape).joined(separator: ","))
+        rows.append((fixedColumns + allKeys).map(csvEscape).joined(separator: ","))
         for day in sorted {
-            var cells = [day.date, String(format: "%.2f", day.mouseDistanceCm)]
+            var cells = [
+                day.date,
+                String(format: "%.2f", day.mouseDistanceCm),
+                String(format: "%.2f", day.averageSpeedKmh),
+                String(format: "%.2f", day.maxSpeedKmh),
+                String(day.leftClicks),
+                String(day.rightClicks),
+                String(day.middleClicks),
+                String(day.totalClicks)
+            ]
             cells += allKeys.map { String(day.keyCounts[$0] ?? 0) }
             rows.append(cells.map(csvEscape).joined(separator: ","))
         }

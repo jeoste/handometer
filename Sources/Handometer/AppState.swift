@@ -25,6 +25,14 @@ final class AppState: ObservableObject {
     private var permissionTimer: Timer?
     private var isRunning = false
 
+    /// Horodatage du dernier événement souris, pour calculer la vitesse.
+    private var lastMouseTimestamp: TimeInterval?
+    /// Au-delà de cet écart entre deux événements, on considère que le
+    /// déplacement a été interrompu (pas de calcul de vitesse).
+    private let maxMovementGap: TimeInterval = 0.3
+    /// Plancher du pas de temps, pour éviter des pics de vitesse irréalistes.
+    private let minMovementDelta: TimeInterval = 0.008
+
     init() {
         let key = Date().dayKey
         self.today = store.stats(for: key)
@@ -68,18 +76,43 @@ final class AppState: ObservableObject {
     // MARK: - Configuration du moniteur
 
     private func configureMonitor() {
-        monitor.onMouseMove = { [weak self] pixels, point in
-            Task { @MainActor in self?.recordMouse(pixels: pixels, point: point) }
+        monitor.onMouseMove = { [weak self] pixels, point, timestamp in
+            Task { @MainActor in self?.recordMouse(pixels: pixels, point: point, timestamp: timestamp) }
+        }
+        monitor.onMouseClick = { [weak self] button in
+            Task { @MainActor in self?.recordClick(button) }
         }
         monitor.onKeyDown = { [weak self] label in
             Task { @MainActor in self?.recordKey(label) }
         }
     }
 
-    private func recordMouse(pixels: Double, point: CGPoint) {
+    private func recordMouse(pixels: Double, point: CGPoint, timestamp: TimeInterval) {
         checkDayRollover()
         let cm = metrics.centimeters(forPixelDistance: pixels, near: point)
-        store.addDistance(cm, to: currentDayKey)
+
+        var seconds = 0.0
+        var instantKmh = 0.0
+        if let last = lastMouseTimestamp {
+            let dt = timestamp - last
+            // On ne calcule la vitesse que pour des segments de mouvement
+            // continu (écart raisonnable entre deux événements).
+            if dt > 0 && dt <= maxMovementGap {
+                seconds = dt
+                let cmPerSecond = cm / max(dt, minMovementDelta)
+                instantKmh = cmPerSecond * DayStats.cmPerSecondToKmh
+            }
+        }
+        lastMouseTimestamp = timestamp
+
+        store.recordMovement(distanceCm: cm, seconds: seconds, instantKmh: instantKmh, to: currentDayKey)
+        today = store.stats(for: currentDayKey)
+        store.scheduleSave()
+    }
+
+    private func recordClick(_ button: MouseButton) {
+        checkDayRollover()
+        store.incrementClick(button, in: currentDayKey)
         today = store.stats(for: currentDayKey)
         store.scheduleSave()
     }

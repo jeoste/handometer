@@ -17,14 +17,32 @@ struct HandometerApp: App {
         .windowResizability(.contentMinSize)
 
         // Icône barre de menu avec résumé rapide.
-        MenuBarExtra("Handometer", systemImage: "cursorarrow.motionlines") {
+        MenuBarExtra {
             MenuBarContent(state: state, updater: updater) {
                 openWindow(id: "dashboard")
                 NSApp.activate(ignoringOtherApps: true)
             }
             .onAppear { state.start() }
+        } label: {
+            Image(nsImage: Self.menuBarIcon)
         }
     }
+
+    /// Icône custom de la barre de menu (template monochrome bundlé dans
+    /// l'app), avec repli sur un symbole système si la ressource manque.
+    static let menuBarIcon: NSImage = {
+        if let url = Bundle.main.url(forResource: "menubar@2x", withExtension: "png"),
+           let img = NSImage(contentsOf: url) {
+            img.size = NSSize(width: 18, height: 18)
+            img.isTemplate = true
+            return img
+        }
+        let fallback = NSImage(systemSymbolName: "cursorarrow.motionlines",
+                               accessibilityDescription: "Handometer")
+            ?? NSImage()
+        fallback.isTemplate = true
+        return fallback
+    }()
 }
 
 /// Contenu du menu déroulant de la barre de menu.
@@ -34,28 +52,30 @@ struct MenuBarContent: View {
     let openDashboard: () -> Void
 
     var body: some View {
-        Text("Aujourd'hui")
+        Text("Today")
             .font(.headline)
-        Text("Souris : \(TodayView.formatDistance(state.today.mouseDistanceCm))")
-        Text("Frappes : \(state.today.totalKeystrokes)")
+        Text("Mouse: \(TodayView.formatDistance(state.today.mouseDistanceCm))")
+        Text("Max speed: \(TodayView.formatSpeed(state.today.maxSpeedKmh))")
+        Text("Clicks: \(state.today.totalClicks)")
+        Text("Keystrokes: \(state.today.totalKeystrokes)")
 
         Divider()
 
         if !state.isTrusted {
-            Button("⚠︎ Autoriser l'Accessibilité…") { state.requestPermission() }
+            Button("⚠︎ Grant Accessibility…") { state.requestPermission() }
         }
-        Button("Ouvrir le dashboard…", action: openDashboard)
-        Toggle("Démarrer à la connexion", isOn: Binding(
+        Button("Open dashboard…", action: openDashboard)
+        Toggle("Launch at login", isOn: Binding(
             get: { state.launchAtLogin },
             set: { _ in state.toggleLaunchAtLogin() }
         ))
 
         Divider()
 
-        Button("Rechercher les mises à jour…") { updater.checkForUpdates() }
+        Button("Check for updates…") { updater.checkForUpdates() }
             .disabled(!updater.canCheckForUpdates)
 
-        Button("Quitter") { NSApp.terminate(nil) }
+        Button("Quit") { NSApp.terminate(nil) }
             .keyboardShortcut("q")
     }
 }
