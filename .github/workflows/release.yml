@@ -7,6 +7,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 # Évite les exécutions concurrentes : un seul release-train à la fois (sinon
 # deux runs pourraient calculer le même numéro de version / se marcher dessus).
@@ -74,6 +75,20 @@ jobs:
           ED_SIG="$(echo "$SIG_OUTPUT" | sed -E 's/.*sparkle:edSignature="([^"]+)".*/\1/')"
           echo "edsig=$ED_SIG" >> "$GITHUB_OUTPUT"
 
+      - name: Créer le tag de version
+        run: |
+          git tag "${{ steps.version.outputs.tag }}"
+          git push origin "${{ steps.version.outputs.tag }}"
+
+      - name: Créer la GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" \
+            "${{ steps.zip.outputs.zip }}" \
+            --title "${{ steps.version.outputs.tag }}" \
+            --generate-notes
+
       - name: Mettre à jour l'appcast
         env:
           TAG: ${{ steps.version.outputs.tag }}
@@ -113,17 +128,3 @@ jobs:
           # [skip ci] empêche ce commit de re-déclencher le workflow.
           git commit -m "chore: appcast pour ${{ steps.version.outputs.tag }} [skip ci]" || echo "rien à committer"
           git push origin HEAD:main
-
-      - name: Créer le tag de version
-        run: |
-          git tag "${{ steps.version.outputs.tag }}"
-          git push origin "${{ steps.version.outputs.tag }}"
-
-      - name: Créer la GitHub Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create "${{ steps.version.outputs.tag }}" \
-            "${{ steps.zip.outputs.zip }}" \
-            --title "${{ steps.version.outputs.tag }}" \
-            --generate-notes

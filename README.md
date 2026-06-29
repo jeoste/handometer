@@ -50,14 +50,18 @@ open Handometer.app
 
 ## Releases & mises à jour
 
-Le workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) se
-déclenche sur un tag `v*` : il compile, signe l'archive (EdDSA Sparkle), publie
-la release et met à jour `appcast.xml`. Pour publier une nouvelle version :
+Chaque push sur `main` déclenche automatiquement le workflow
+[`.github/workflows/release.yml`](.github/workflows/release.yml) : il incrémente
+le numéro de version (patch), compile l'app, signe l'archive (EdDSA Sparkle),
+publie une [GitHub Release](https://github.com/jeoste/handometer/releases) et
+met à jour `appcast.xml`.
 
-```bash
-git tag v1.2.3
-git push origin v1.2.3
-```
+Les apps installées détectent les mises à jour via Sparkle (menu barre →
+**Check for updates…**). Le flux lit `appcast.xml` sur `main` et télécharge le
+zip depuis la GitHub Release correspondante.
+
+> L'auto-update ne fonctionne qu'avec un bundle `.app` complet (build via
+> `./build.sh` ou release téléchargée), pas avec `swift run`.
 
 ## Licence
 

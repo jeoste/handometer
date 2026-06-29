@@ -17,7 +17,7 @@ VERSION="${2:-${VERSION:-1.0.0}}"
 FEED_URL="https://raw.githubusercontent.com/jeoste/handometer/main/appcast.xml"
 PUBLIC_ED_KEY="OoyEB4nsmmFkP8z2s71XV+3rTETsmD9yQXYqhwsqY70="
 
-echo "▶︎ Compilation ($CONFIG) version $VERSION…"
+echo "▶︎ Compilation ($CONFIG) version ${VERSION}…"
 swift build -c "$CONFIG"
 
 BIN_DIR="$(swift build -c "$CONFIG" --show-bin-path)"
