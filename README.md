@@ -40,6 +40,48 @@ VERSION=1.2.3 ./build.sh   # with a specific version
 open Handometer.app
 ```
 
+## Code signing & the Accessibility permission
+
+Handometer needs the **Accessibility** permission. macOS (TCC) ties that grant to
+the app's code signature. An **ad-hoc** signature pins it to the exact binary
+(`cdhash`), so every update looks like a *new* app — macOS re-asks for the
+permission and leaves a stale entry behind.
+
+The fix (no Apple Developer account needed): sign every release with a **stable
+self-signed certificate**. The grant then keys on the certificate and survives
+updates.
+
+**One-time setup**
+
+```bash
+bash Tools/make-signing-cert.sh     # creates "Handometer Self-Signed" (10-year cert)
+                                    # → backup written to ~/handometer-signing-cert.p12
+```
+
+**Make CI sign with the same certificate** (releases are built in GitHub Actions):
+
+```bash
+bash Tools/export-cert-secret.sh    # prints/copies the base64 .p12
+```
+
+Then in GitHub → *Settings ▸ Secrets and variables ▸ Actions* add:
+- `SIGNING_CERT_P12_BASE64` = the base64 value
+- `SIGNING_CERT_PASSWORD` = `handometer` (the `.p12` password)
+
+> Every release **must** be signed with this same certificate. Keep the `.p12`
+> backup safe — losing it means the permission resets once more on the next build.
+
+**Migrate the currently-installed (ad-hoc) app — once:**
+
+```bash
+./build.sh release <version>        # now signed with the certificate
+osascript -e 'quit app "Handometer"' 2>/dev/null || true
+bash Tools/reset-accessibility.sh   # clears the stale TCC entry
+open Handometer.app                 # grant Accessibility one last time
+```
+
+From then on, updates keep the permission.
+
 ## How it works
 
 - Monitoring via `NSEvent` (global + local monitors).

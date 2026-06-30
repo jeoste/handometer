@@ -86,11 +86,27 @@ cat > "${APP_DIR}/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-# Signature ad-hoc : framework d'abord, puis l'app (pour une permission
-# Accessibilité stable entre les lancements).
-echo "▶︎ Signature ad-hoc…"
-codesign --force --sign - "${APP_DIR}/Contents/Frameworks/Sparkle.framework" 2>/dev/null || true
-codesign --force --deep --sign - "$APP_DIR" 2>/dev/null || true
+# Signature : on privilégie un certificat de code-signing stable pour que la
+# permission Accessibilité (TCC) persiste entre les mises à jour. À défaut, repli
+# sur signature ad-hoc (permission redemandée à chaque update).
+# Voir Tools/make-signing-cert.sh.
+# NB : le certificat auto-signé est « untrusted » → il n'apparaît que via
+# `find-identity` SANS `-v` (codesign sait néanmoins l'utiliser).
+SIGNING_IDENTITY="${SIGNING_IDENTITY:-Handometer Self-Signed}"
+if security find-identity 2>/dev/null | grep -q "$SIGNING_IDENTITY"; then
+    SIGN_ID="$SIGNING_IDENTITY"
+    echo "▶︎ Signature avec « $SIGN_ID »…"
+else
+    SIGN_ID="-"
+    echo "⚠︎ Identité « $SIGNING_IDENTITY » introuvable — repli sur signature ad-hoc." >&2
+    echo "   La permission Accessibilité sera instable entre les mises à jour." >&2
+    echo "   Lancez Tools/make-signing-cert.sh pour créer le certificat stable." >&2
+    echo "▶︎ Signature ad-hoc…"
+fi
+
+# Framework d'abord, puis l'app (les erreurs ne sont plus masquées).
+codesign --force --sign "$SIGN_ID" "${APP_DIR}/Contents/Frameworks/Sparkle.framework"
+codesign --force --deep --sign "$SIGN_ID" "$APP_DIR"
 
 echo "✓ Terminé : ${APP_DIR} (v${VERSION})"
 echo "  Lancer :  open \"${APP_DIR}\""

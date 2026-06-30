@@ -50,6 +50,30 @@ jobs:
           echo "version=${NEXT}" >> "$GITHUB_OUTPUT"
           echo "tag=v${NEXT}" >> "$GITHUB_OUTPUT"
 
+      - name: Importer le certificat de code-signing (permission Accessibilité stable)
+        env:
+          CERT_P12_BASE64: ${{ secrets.SIGNING_CERT_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.SIGNING_CERT_PASSWORD }}
+        run: |
+          if [ -z "${CERT_P12_BASE64:-}" ]; then
+            echo "::warning::SIGNING_CERT_P12_BASE64 absent — build ad-hoc (permission Accessibilité instable entre mises à jour). Voir Tools/make-signing-cert.sh."
+            exit 0
+          fi
+          KEYCHAIN="$RUNNER_TEMP/handometer-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          echo "$CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "${CERT_PASSWORD:-}" -T /usr/bin/codesign -A
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+          # Rendre le trousseau visible pour `security find-identity` (utilisé par build.sh).
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | sed s/\"//g)
+          rm -f "$RUNNER_TEMP/cert.p12"
+          # Certificat auto-signé « untrusted » → visible via find-identity SANS -v.
+          security find-identity | grep "Handometer Self-Signed" || {
+            echo "::error::Certificat importé mais identité « Handometer Self-Signed » introuvable."; exit 1; }
+
       - name: Compiler et assembler le .app
         run: VERSION="${{ steps.version.outputs.version }}" ./build.sh release
 
