@@ -35,4 +35,10 @@ final class Updater: ObservableObject {
     var canCheckForUpdates: Bool {
         controller.updater.canCheckForUpdates
     }
+
+    /// Vérification automatique en arrière-plan (Sparkle).
+    var automaticallyChecksForUpdates: Bool {
+        get { controller.updater.automaticallyChecksForUpdates }
+        set { controller.updater.automaticallyChecksForUpdates = newValue }
+    }
 }

@@ -7,6 +7,7 @@ struct HandometerApp: App {
     @StateObject private var state = AppState()
     @StateObject private var updater = Updater()
     @Environment(\.openWindow) private var openWindow
+    @State private var settingsTab: SettingsTab = .general
 
     var body: some Scene {
         // Fenêtre dashboard (ouverte à la demande depuis le menu).
@@ -16,12 +17,25 @@ struct HandometerApp: App {
         }
         .windowResizability(.contentMinSize)
 
+        Window("Settings", id: "settings") {
+            SettingsView(state: state, updater: updater, selectedTab: $settingsTab)
+        }
+        .windowResizability(.contentSize)
+
         // Icône barre de menu avec résumé rapide.
         MenuBarExtra {
-            MenuBarContent(state: state, updater: updater) {
-                openWindow(id: "dashboard")
-                NSApp.activate(ignoringOtherApps: true)
-            }
+            MenuBarContent(
+                state: state,
+                openDashboard: {
+                    openWindow(id: "dashboard")
+                    NSApp.activate(ignoringOtherApps: true)
+                },
+                openSettings: { tab in
+                    settingsTab = tab
+                    openWindow(id: "settings")
+                    NSApp.activate(ignoringOtherApps: true)
+                }
+            )
             .onAppear { state.start() }
         } label: {
             Image(nsImage: Self.menuBarIcon)
@@ -67,13 +81,12 @@ private struct MenuBarStatsSnapshot {
 /// Contenu du menu déroulant de la barre de menu.
 struct MenuBarContent: View {
     let state: AppState
-    let updater: Updater
     let openDashboard: () -> Void
+    let openSettings: (SettingsTab) -> Void
 
     @State private var stats = MenuBarStatsSnapshot()
     @State private var isTrusted = Permissions.isTrusted
     @State private var needsAccessibilityRegrant = false
-    @State private var launchAtLogin = LoginItem.isEnabled
     @State private var refreshTimer: Timer?
 
     var body: some View {
@@ -98,19 +111,11 @@ struct MenuBarContent: View {
                 Button("⚠︎ Grant Accessibility…") { state.requestPermission() }
             }
             Button("Open dashboard…", action: openDashboard)
-            Toggle("Launch at login", isOn: Binding(
-                get: { launchAtLogin },
-                set: { _ in
-                    state.toggleLaunchAtLogin()
-                    launchAtLogin = state.launchAtLogin
-                }
-            ))
+            Button("Settings…") { openSettings(.general) }
 
             Divider()
 
-            Button("Check for updates…") { updater.checkForUpdates() }
-                .disabled(!updater.canCheckForUpdates)
-
+            Button("About Handometer…") { openSettings(.about) }
             Button("Quit") { NSApp.terminate(nil) }
                 .keyboardShortcut("q")
         }
@@ -137,7 +142,6 @@ struct MenuBarContent: View {
         stats = MenuBarStatsSnapshot(from: state.today)
         isTrusted = state.isTrusted
         needsAccessibilityRegrant = state.needsAccessibilityRegrant
-        launchAtLogin = state.launchAtLogin
     }
 }
 

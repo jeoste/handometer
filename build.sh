@@ -12,6 +12,9 @@ CONFIG="${1:-release}"
 
 # Version : argument 2, sinon variable d'env VERSION, sinon défaut.
 VERSION="${2:-${VERSION:-1.0.0}}"
+# Numéro de build (CI) ou horodatage pour les builds locaux.
+BUILD_NUMBER="${BUILD_NUMBER:-${GITHUB_RUN_NUMBER:-$(date +%s)}}"
+BUILD_DATE="$(date '+%d %b %Y at %H:%M')"
 
 # Flux Sparkle (dépôt public) + clé publique EdDSA.
 FEED_URL="https://raw.githubusercontent.com/jeoste/handometer/main/appcast.xml"
@@ -63,9 +66,11 @@ cat > "${APP_DIR}/Contents/Info.plist" <<PLIST
     <key>CFBundleIdentifier</key>
     <string>${BUNDLE_ID}</string>
     <key>CFBundleVersion</key>
-    <string>${VERSION}</string>
+    <string>${BUILD_NUMBER}</string>
     <key>CFBundleShortVersionString</key>
     <string>${VERSION}</string>
+    <key>HMBuildDate</key>
+    <string>${BUILD_DATE}</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>LSMinimumSystemVersion</key>
@@ -108,5 +113,5 @@ fi
 codesign --force --sign "$SIGN_ID" "${APP_DIR}/Contents/Frameworks/Sparkle.framework"
 codesign --force --deep --sign "$SIGN_ID" "$APP_DIR"
 
-echo "✓ Terminé : ${APP_DIR} (v${VERSION})"
+echo "✓ Terminé : ${APP_DIR} (v${VERSION} build ${BUILD_NUMBER})"
 echo "  Lancer :  open \"${APP_DIR}\""

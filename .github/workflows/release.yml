@@ -75,7 +75,7 @@ jobs:
             echo "::error::Certificat importé mais identité « Handometer Self-Signed » introuvable."; exit 1; }
 
       - name: Compiler et assembler le .app
-        run: VERSION="${{ steps.version.outputs.version }}" ./build.sh release
+        run: VERSION="${{ steps.version.outputs.version }}" BUILD_NUMBER="${{ github.run_number }}" ./build.sh release
 
       - name: Zipper le bundle
         id: zip
