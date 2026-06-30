@@ -20,7 +20,14 @@ final class Updater: ObservableObject {
     }
 
     /// Lance une vérification manuelle (depuis le menu).
+    ///
+    /// Handometer est une app « agent » (`LSUIElement` / `.accessory`) : sans
+    /// activation préalable, la fenêtre Sparkle s'ouvre en arrière-plan au 1er
+    /// clic (l'app n'est pas au premier plan) et l'utilisateur doit cliquer une
+    /// 2e fois pour que Sparkle la ramène devant via `showUpdateInFocus`. On
+    /// active donc l'app avant de lancer la vérification.
     func checkForUpdates() {
+        NSApp.activate(ignoringOtherApps: true)
         controller.updater.checkForUpdates()
     }
 
