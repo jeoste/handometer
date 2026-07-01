@@ -71,8 +71,9 @@ private struct MenuBarStatsSnapshot {
     init() {}
 
     init(from stats: DayStats) {
-        mouseDistance = TodayView.formatDistance(stats.mouseDistanceCm)
-        maxSpeed = TodayView.formatSpeed(stats.maxSpeedKmh)
+        let units = UnitPreferences.shared
+        mouseDistance = units.formatDistance(cm: stats.mouseDistanceCm)
+        maxSpeed = units.formatSpeed(kmh: stats.maxSpeedKmh)
         clicks = stats.totalClicks
         keystrokes = stats.totalKeystrokes
     }
@@ -88,6 +89,7 @@ struct MenuBarContent: View {
     @State private var isTrusted = Permissions.isTrusted
     @State private var needsAccessibilityRegrant = false
     @State private var refreshTimer: Timer?
+    @ObservedObject private var units = UnitPreferences.shared
 
     var body: some View {
         Group {
@@ -121,6 +123,8 @@ struct MenuBarContent: View {
         }
         .onAppear { startMenuRefresh() }
         .onDisappear { stopMenuRefresh() }
+        .onChange(of: units.distanceUnit) { _ in refreshFromState() }
+        .onChange(of: units.speedUnit) { _ in refreshFromState() }
     }
 
     @MainActor
@@ -150,6 +154,7 @@ struct MenuBarContent: View {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory) // pas d'icône Dock
+        AchievementNotifier.configure()
         Permissions.requestIfNeeded()
     }
 }

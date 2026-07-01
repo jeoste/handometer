@@ -22,19 +22,35 @@ struct SettingsView: View {
                 .tabItem { Label("About", systemImage: "info.circle") }
                 .tag(SettingsTab.about)
         }
-        .frame(width: 420, height: 340)
+        .frame(width: 420, height: 400)
     }
 }
 
 private struct GeneralSettingsPane: View {
     @ObservedObject var state: AppState
+    @ObservedObject private var units = UnitPreferences.shared
 
     var body: some View {
         Form {
-            Toggle("Launch at login", isOn: Binding(
-                get: { state.launchAtLogin },
-                set: { _ in state.toggleLaunchAtLogin() }
-            ))
+            Section("Units") {
+                Picker("Distance", selection: $units.distanceUnit) {
+                    ForEach(DistanceUnit.allCases) { unit in
+                        Text(unit.displayName).tag(unit)
+                    }
+                }
+                Picker("Speed", selection: $units.speedUnit) {
+                    ForEach(SpeedUnit.allCases) { unit in
+                        Text(unit.displayName).tag(unit)
+                    }
+                }
+            }
+
+            Section {
+                Toggle("Launch at login", isOn: Binding(
+                    get: { state.launchAtLogin },
+                    set: { _ in state.toggleLaunchAtLogin() }
+                ))
+            }
         }
         .formStyle(.grouped)
         .padding()

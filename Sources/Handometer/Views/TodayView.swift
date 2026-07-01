@@ -4,6 +4,7 @@ import SwiftUI
 /// de frappes, plus le détail des touches les plus fréquentes.
 struct TodayView: View {
     @ObservedObject var state: AppState
+    @ObservedObject private var units = UnitPreferences.shared
 
     private let columns = [GridItem(.flexible()), GridItem(.flexible())]
 
@@ -13,7 +14,7 @@ struct TodayView: View {
                 LazyVGrid(columns: columns, spacing: 16) {
                     StatCard(
                         title: "Mouse distance",
-                        value: Self.formatDistance(state.today.mouseDistanceCm),
+                        value: units.formatDistance(cm: state.today.mouseDistanceCm),
                         systemImage: "cursorarrow.motionlines"
                     )
                     StatCard(
@@ -24,12 +25,12 @@ struct TodayView: View {
                     )
                     StatCard(
                         title: "Average speed",
-                        value: Self.formatSpeed(state.today.averageSpeedKmh),
+                        value: units.formatSpeed(kmh: state.today.averageSpeedKmh),
                         systemImage: "gauge.with.dots.needle.50percent"
                     )
                     StatCard(
                         title: "Max speed",
-                        value: Self.formatSpeed(state.today.maxSpeedKmh),
+                        value: units.formatSpeed(kmh: state.today.maxSpeedKmh),
                         systemImage: "speedometer"
                     )
                     StatCard(
@@ -62,16 +63,6 @@ struct TodayView: View {
         }
     }
 
-    static func formatDistance(_ cm: Double) -> String {
-        if cm >= 100 {
-            return String(format: "%.2f m", cm / 100)
-        }
-        return String(format: "%.1f cm", cm)
-    }
-
-    static func formatSpeed(_ kmh: Double) -> String {
-        String(format: "%.1f km/h", kmh)
-    }
 }
 
 /// Petite carte de statistique mise en valeur.

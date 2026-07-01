@@ -119,6 +119,17 @@ extension DateFormatter {
         f.dateFormat = "yyyy-MM-dd"
         return f
     }()
+
+    /// Affichage lisible d'une date (ex. « Wed, Jul 1, 2026 »).
+    static let dayDisplay: DateFormatter = {
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)
+        f.locale = .current
+        f.timeZone = .current
+        f.dateStyle = .medium
+        f.timeStyle = .none
+        return f
+    }()
 }
 
 extension Date {

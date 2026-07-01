@@ -38,7 +38,7 @@ enum AchievementMetric: String, Codable {
         case .totalKeystrokes:
             return "\(Self.grouped(value)) keys \(scope.period)"
         case .mouseDistanceCm:
-            return "\(Self.distance(cm: value)) \(scope.period)"
+            return "\(UnitPreferences.shared.formatDistance(cm: value)) \(scope.period)"
         case .totalClicks:
             return "\(Self.grouped(value)) clicks \(scope.period)"
         case .rightClicks:
@@ -46,7 +46,7 @@ enum AchievementMetric: String, Codable {
         case .middleClicks:
             return "\(Self.grouped(value)) middle-clicks \(scope.period)"
         case .maxSpeedKmh:
-            return String(format: "%.1f km/h %@", value, scope.period)
+            return "\(UnitPreferences.shared.formatSpeed(kmh: value)) \(scope.period)"
         case .streakDays:
             return "\(Int(value))-day streak"
         }
@@ -60,7 +60,7 @@ enum AchievementMetric: String, Codable {
         case .totalKeystrokes:
             return "Type \(Self.grouped(threshold)) keystrokes"
         case .mouseDistanceCm:
-            return "Move your mouse \(Self.distance(cm: threshold))"
+            return "Move your mouse \(UnitPreferences.shared.formatDistance(cm: threshold))"
         case .totalClicks:
             return "Click \(Self.grouped(threshold)) times"
         case .rightClicks:
@@ -68,7 +68,8 @@ enum AchievementMetric: String, Codable {
         case .middleClicks:
             return "Middle-click \(Self.grouped(threshold)) times"
         case .maxSpeedKmh:
-            return String(format: "Reach %.0f km/h cursor speed", threshold)
+            let speed = UnitPreferences.shared.formatSpeed(kmh: threshold)
+            return "Reach \(speed) cursor speed"
         case .streakDays:
             return "Stay active \(Int(threshold)) days in a row"
         }
@@ -85,15 +86,6 @@ enum AchievementMetric: String, Codable {
 
     static func grouped(_ value: Double) -> String {
         groupingFormatter.string(from: NSNumber(value: Int(value))) ?? "\(Int(value))"
-    }
-
-    /// Formate une distance en cm vers une chaîne lisible (m / km).
-    static func distance(cm: Double) -> String {
-        let meters = cm / 100
-        if meters >= 1_000 {
-            return String(format: "%.2f km", meters / 1_000)
-        }
-        return String(format: "%.0f m", meters)
     }
 }
 
