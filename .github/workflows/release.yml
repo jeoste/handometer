@@ -117,17 +117,20 @@ jobs:
         env:
           TAG: ${{ steps.version.outputs.tag }}
           VERSION: ${{ steps.version.outputs.version }}
+          BUILD_NUMBER: ${{ github.run_number }}
           ZIP: ${{ steps.zip.outputs.zip }}
           SIZE: ${{ steps.zip.outputs.size }}
           EDSIG: ${{ steps.sign.outputs.edsig }}
         run: |
           DL_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${ZIP}"
           PUBDATE="$(date -u '+%a, %d %b %Y %H:%M:%S +0000')"
+          # sparkle:version doit correspondre à CFBundleVersion (numéro de build CI),
+          # pas à la version marketing — sinon Sparkle croit l'app déjà à jour.
           ITEM=$(cat <<XML
                   <item>
                       <title>${TAG}</title>
                       <pubDate>${PUBDATE}</pubDate>
-                      <sparkle:version>${VERSION}</sparkle:version>
+                      <sparkle:version>${BUILD_NUMBER}</sparkle:version>
                       <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
                       <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
                       <enclosure url="${DL_URL}" length="${SIZE}" type="application/octet-stream" sparkle:edSignature="${EDSIG}" />
