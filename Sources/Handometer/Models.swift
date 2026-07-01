@@ -4,7 +4,7 @@ import Foundation
 ///
 /// Pour des raisons de vie privée, on ne stocke que des **compteurs par
 /// caractère** (`keyCounts`) et jamais l'ordre des frappes ni les mots tapés.
-struct DayStats: Codable {
+struct DayStats: Codable, Equatable {
     /// Date au format `YYYY-MM-DD`.
     var date: String
     /// Distance physique parcourue par le curseur, en centimètres.

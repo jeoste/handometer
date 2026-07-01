@@ -32,7 +32,13 @@ final class AppState: ObservableObject {
     private var dayCheckTimer: Timer?
     private var bannerDismissWorkItem: DispatchWorkItem?
     private var permissionTimer: Timer?
+    private var uiSyncWorkItem: DispatchWorkItem?
     private var isRunning = false
+
+    /// Intervalle minimum entre deux rafraîchissements UI déclenchés par la souris.
+    /// Les mouvements sont toujours enregistrés ; seule la publication SwiftUI
+    /// est limitée pour éviter des centaines de re-rendus par seconde.
+    private let mouseUISyncInterval: TimeInterval = 0.5
 
     /// Horodatage du dernier événement souris, pour calculer la vitesse.
     private var lastMouseTimestamp: TimeInterval?
@@ -90,6 +96,7 @@ final class AppState: ObservableObject {
         monitor.stop()
         dayCheckTimer?.invalidate()
         permissionTimer?.invalidate()
+        flushUISync()
         store.saveNow()
         achievementStore.saveNow()
     }
@@ -106,14 +113,18 @@ final class AppState: ObservableObject {
     // MARK: - Configuration du moniteur
 
     private func configureMonitor() {
+        // Les moniteurs NSEvent sont livrés sur la file principale ; pas de Task
+        // par événement (sinon accumulation mémoire à ~100 Hz).
         monitor.onMouseMove = { [weak self] pixels, point, timestamp in
-            Task { @MainActor in self?.recordMouse(pixels: pixels, point: point, timestamp: timestamp) }
+            MainActor.assumeIsolated {
+                self?.recordMouse(pixels: pixels, point: point, timestamp: timestamp)
+            }
         }
         monitor.onMouseClick = { [weak self] button in
-            Task { @MainActor in self?.recordClick(button) }
+            MainActor.assumeIsolated { self?.recordClick(button) }
         }
         monitor.onKeyDown = { [weak self] label in
-            Task { @MainActor in self?.recordKey(label) }
+            MainActor.assumeIsolated { self?.recordKey(label) }
         }
     }
 
@@ -136,7 +147,7 @@ final class AppState: ObservableObject {
         lastMouseTimestamp = timestamp
 
         store.recordMovement(distanceCm: cm, seconds: seconds, instantKmh: instantKmh, to: currentDayKey)
-        syncPublishedStats()
+        scheduleUISync()
         store.scheduleSave()
     }
 
@@ -152,6 +163,25 @@ final class AppState: ObservableObject {
         store.incrementKey(label, in: currentDayKey)
         syncPublishedStats()
         store.scheduleSave()
+    }
+
+    /// Planifie une synchro UI débouncée (mouvements souris à haute fréquence).
+    private func scheduleUISync() {
+        guard uiSyncWorkItem == nil else { return }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.uiSyncWorkItem = nil
+            self.syncPublishedStats()
+        }
+        uiSyncWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + mouseUISyncInterval, execute: work)
+    }
+
+    /// Force une synchro UI immédiate (arrêt, changement de jour, etc.).
+    private func flushUISync() {
+        uiSyncWorkItem?.cancel()
+        uiSyncWorkItem = nil
+        syncPublishedStats()
     }
 
     private func syncPublishedStats() {
@@ -217,7 +247,15 @@ final class AppState: ObservableObject {
     }
 
     private func refreshHistory() {
-        history = store.days.values.sorted { $0.date < $1.date }
+        let todayStats = store.stats(for: currentDayKey)
+        if let index = history.firstIndex(where: { $0.date == currentDayKey }) {
+            guard history[index] != todayStats else { return }
+            var updated = history
+            updated[index] = todayStats
+            history = updated
+        } else {
+            history = store.days.values.sorted { $0.date < $1.date }
+        }
     }
 
     // MARK: - Actions UI
