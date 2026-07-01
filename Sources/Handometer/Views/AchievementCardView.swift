@@ -119,13 +119,7 @@ struct AchievementCardView: View {
                 .font(.system(size: 16, weight: .medium, design: .rounded))
                 .foregroundStyle(.white.opacity(0.45))
 
-            HStack(spacing: 8) {
-                Image(systemName: "cursorarrow.motionlines")
-                    .font(.system(size: 18, weight: .bold))
-                Text("Handometer")
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
-            }
-            .foregroundStyle(.white.opacity(0.4))
+            BrandLogoView(height: 28)
         }
     }
 }
