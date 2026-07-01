@@ -14,6 +14,8 @@ struct HistoryChartView: View {
                         .foregroundStyle(.secondary)
                         .padding()
                 } else {
+                    UnitsPickerBar()
+
                     section(title: "Daily breakdown") {
                         ForEach(history.reversed(), id: \.date) { day in
                             DayHistoryRow(day: day)
@@ -51,6 +53,16 @@ struct HistoryChartView: View {
                             )
                             .foregroundStyle(.blue)
                         }
+                        .chartYAxis {
+                            AxisMarks { value in
+                                AxisValueLabel {
+                                    if let v = value.as(Double.self) {
+                                        Text(units.formatChartDistanceAxis(v))
+                                    }
+                                }
+                            }
+                        }
+                        .id(units.distanceUnit)
                         .frame(height: 220)
                     }
 
@@ -62,6 +74,16 @@ struct HistoryChartView: View {
                             )
                             .foregroundStyle(.teal)
                         }
+                        .chartYAxis {
+                            AxisMarks { value in
+                                AxisValueLabel {
+                                    if let v = value.as(Double.self) {
+                                        Text("\(units.formatChartSpeedAxis(v)) \(units.chartSpeedLabel)")
+                                    }
+                                }
+                            }
+                        }
+                        .id(units.speedUnit)
                         .frame(height: 220)
                     }
 
@@ -73,6 +95,16 @@ struct HistoryChartView: View {
                             )
                             .foregroundStyle(.orange)
                         }
+                        .chartYAxis {
+                            AxisMarks { value in
+                                AxisValueLabel {
+                                    if let v = value.as(Double.self) {
+                                        Text("\(units.formatChartSpeedAxis(v)) \(units.chartSpeedLabel)")
+                                    }
+                                }
+                            }
+                        }
+                        .id(units.speedUnit)
                         .frame(height: 220)
                     }
 

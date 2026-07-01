@@ -118,6 +118,35 @@ final class UnitPreferences: ObservableObject {
 
     var chartSpeedLabel: String { speedUnit.displayName }
 
+    /// Libellé compact pour l'axe Y des graphiques de distance.
+    func formatChartDistanceAxis(_ value: Double) -> String {
+        switch distanceUnit {
+        case .meters:
+            if value >= 1_000 {
+                return String(format: "%.1f km", value / 1_000)
+            }
+            if value >= 10 {
+                return String(format: "%.0f m", value)
+            }
+            return String(format: "%.1f m", value)
+        case .steps:
+            if value >= 10_000 {
+                return String(format: "%.0fk steps", value / 1_000)
+            }
+            return String(format: "%.0f steps", value)
+        }
+    }
+
+    /// Libellé compact pour l'axe Y des graphiques de vitesse.
+    func formatChartSpeedAxis(_ value: Double) -> String {
+        switch speedUnit {
+        case .kmh:
+            return String(format: "%.0f", value)
+        case .mph:
+            return String(format: "%.0f", value)
+        }
+    }
+
     // MARK: - Conversions
 
     static func steps(fromMeters meters: Double) -> Double {
