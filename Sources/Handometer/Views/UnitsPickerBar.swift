@@ -37,5 +37,7 @@ struct UnitsPickerBar: View {
                 }
             }
         }
+        .padding()
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 12))
     }
 }

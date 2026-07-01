@@ -139,12 +139,14 @@ final class UnitPreferences: ObservableObject {
 
     /// Libellé compact pour l'axe Y des graphiques de vitesse.
     func formatChartSpeedAxis(_ value: Double) -> String {
-        switch speedUnit {
-        case .kmh:
-            return String(format: "%.0f", value)
-        case .mph:
-            return String(format: "%.0f", value)
-        }
+        String(format: "%.0f", value)
+    }
+
+    /// Libellé compact pour les compteurs (frappes, clics).
+    func formatChartCountAxis(_ value: Double) -> String {
+        if value >= 10_000 { return String(format: "%.0fk", value / 1_000) }
+        if value >= 1_000 { return String(format: "%.1fk", value / 1_000) }
+        return String(format: "%.0f", value)
     }
 
     // MARK: - Conversions

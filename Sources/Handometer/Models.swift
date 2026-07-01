@@ -107,6 +107,16 @@ extension Collection where Element == DayStats {
     var aggregatedKeyCounts: [String: Int] {
         DayStats.aggregatedKeyCounts(from: self)
     }
+
+    /// Nombre total de clics sur toutes les journées.
+    var totalClicks: Int {
+        reduce(0) { $0 + $1.totalClicks }
+    }
+
+    /// Distance souris cumulée, en centimètres.
+    var totalMouseDistanceCm: Double {
+        reduce(0) { $0 + $1.mouseDistanceCm }
+    }
 }
 
 extension DateFormatter {
@@ -128,6 +138,16 @@ extension DateFormatter {
         f.timeZone = .current
         f.dateStyle = .medium
         f.timeStyle = .none
+        return f
+    }()
+
+    /// Libellé court pour les axes de graphiques (ex. « Jun 30 »).
+    static let chartAxis: DateFormatter = {
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)
+        f.locale = .current
+        f.timeZone = .current
+        f.setLocalizedDateFormatFromTemplate("MMMd")
         return f
     }()
 }
