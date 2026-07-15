@@ -35,7 +35,7 @@ function isRecentDay(dayKey: string): boolean {
 
 function sanitizeName(raw: string): string {
   // eslint-disable-next-line no-control-regex
-  return raw.replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, 24) || "Anonymous";
+  return raw.replace(/[\u0000-\u001F\u007F#]/g, "").trim().slice(0, 24) || "Anonymous";
 }
 
 function clampCount(value: unknown, max: number): number | null {
@@ -47,6 +47,48 @@ function clampCount(value: unknown, max: number): number | null {
 // Même barème que l'XP locale (PlayerLevel.swift). Score calculé serveur.
 function score(keystrokes: number, distanceCm: number, clicks: number): number {
   return Math.round(keystrokes + 0.1 * distanceCm + 2 * clicks);
+}
+
+/** Discriminateur style Discord, déterministe depuis le clientId (stable,
+ *  aucun état à stocker) : 4 chiffres 1000-9999. */
+function discriminator(clientId: string): string {
+  const n = parseInt(clientId.replace(/-/g, "").slice(0, 8), 16);
+  return String((n % 9000) + 1000);
+}
+
+/**
+ * Unicité des pseudos, premier arrivé premier servi :
+ * - le premier client à revendiquer « jeoste » l'affiche tel quel ;
+ * - tout autre client choisissant « jeoste » affiche « jeoste#4821 » ;
+ * - changer de pseudo libère l'ancien nom.
+ * Clés : `lb:name_owner` (base minuscule → clientId propriétaire) et
+ * `lb:name_base` (clientId → base revendiquée, pour la libération).
+ */
+async function resolveDisplayName(
+  clientId: string,
+  base: string,
+): Promise<string> {
+  const lower = base.toLowerCase();
+  const results = await redisPipeline([
+    ["HGET", "lb:name_base", clientId],
+    ["HSETNX", "lb:name_owner", lower, clientId],
+    ["HGET", "lb:name_owner", lower],
+    ["HSET", "lb:name_base", clientId, lower],
+  ]);
+  const previousBase = results[0] as string | null;
+  const owner = results[2] as string | null;
+
+  // Renommage : libère l'ancienne base si ce client la possédait.
+  if (previousBase && previousBase !== lower) {
+    const [previousOwner] = await redisPipeline([
+      ["HGET", "lb:name_owner", previousBase],
+    ]);
+    if (previousOwner === clientId) {
+      await redisPipeline([["HDEL", "lb:name_owner", previousBase]]);
+    }
+  }
+
+  return owner === clientId ? base : `${base}#${discriminator(clientId)}`;
 }
 
 export async function POST(req: NextRequest) {
@@ -74,12 +116,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid payload" }, { status: 400 });
   }
 
-  const name = sanitizeName(String(body.name ?? ""));
   const dayScore = score(keystrokes, distanceCm, clicks);
   const weekKey = isoWeekKey(dayKey);
   const daysHash = `lb:days:${weekKey}:${clientId}`;
 
   try {
+    const name = await resolveDisplayName(
+      clientId,
+      sanitizeName(String(body.name ?? "")),
+    );
     // Écritures idempotentes + lecture des scores journaliers de la semaine.
     // HGET en tête : valeur précédente du jour, pour la mise à jour
     // incrémentale des classements longue durée (delta = nouveau − précédent).
@@ -112,7 +157,7 @@ export async function POST(req: NextRequest) {
       ["ZINCRBY", "lb:a", delta, clientId],
     ]);
 
-    return NextResponse.json({ ok: true, score: dayScore });
+    return NextResponse.json({ ok: true, score: dayScore, displayName: name });
   } catch (err) {
     console.error("leaderboard submit failed:", err);
     return NextResponse.json({ error: "storage error" }, { status: 503 });
