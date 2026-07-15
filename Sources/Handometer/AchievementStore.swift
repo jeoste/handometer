@@ -9,6 +9,9 @@ final class AchievementStore {
     private let debounceInterval: TimeInterval = 5
 
     private(set) var unlocks: [UnlockedAchievement] = []
+    /// Cache incrémental des clés d'unicité (évite de reconstruire un Set
+    /// depuis la liste — qui grossit sans borne — à chaque évaluation).
+    private(set) var unlockedKeys: Set<String> = []
 
     init() {
         let fm = FileManager.default
@@ -25,6 +28,7 @@ final class AchievementStore {
         decoder.dateDecodingStrategy = .iso8601
         if let decoded = try? decoder.decode([UnlockedAchievement].self, from: data) {
             unlocks = decoded
+            unlockedKeys = Set(decoded.map(\.uniquenessKey))
         }
     }
 
@@ -50,7 +54,7 @@ final class AchievementStore {
     }
 
     func isUnlocked(_ definition: AchievementDefinition, dayKey: String) -> Bool {
-        unlocks.contains { $0.uniquenessKey == uniquenessKey(for: definition, dayKey: dayKey) }
+        unlockedKeys.contains(uniquenessKey(for: definition, dayKey: dayKey))
     }
 
     func uniquenessKey(for definition: AchievementDefinition, dayKey: String) -> String {
@@ -63,15 +67,14 @@ final class AchievementStore {
     /// Ajoute les nouveaux unlocks (ignore les doublons) et retourne ceux réellement ajoutés.
     @discardableResult
     func add(_ newUnlocks: [UnlockedAchievement], dayKey: String) -> [UnlockedAchievement] {
+        guard !newUnlocks.isEmpty else { return [] }
         var added: [UnlockedAchievement] = []
-        let existing = Set(unlocks.map(\.uniquenessKey))
 
         for unlock in newUnlocks {
             let key = unlock.uniquenessKey
-            guard !existing.contains(key) && !added.contains(where: { $0.uniquenessKey == key }) else {
-                continue
-            }
+            guard !unlockedKeys.contains(key) else { continue }
             unlocks.append(unlock)
+            unlockedKeys.insert(key)
             added.append(unlock)
         }
 
@@ -91,7 +94,7 @@ final class AchievementStore {
             today: history.last(where: { $0.date == currentDayKey }) ?? DayStats(date: currentDayKey),
             history: history,
             globalKeyCounts: globalKeyCounts,
-            alreadyUnlocked: unlocks,
+            alreadyUnlockedKeys: unlockedKeys,
             currentDayKey: currentDayKey,
             includeDaily: false
         )

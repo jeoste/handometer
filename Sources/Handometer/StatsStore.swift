@@ -36,9 +36,12 @@ final class StatsStore {
         }
     }
 
-    /// Planifie une sauvegarde débouncée.
+    /// Planifie une sauvegarde débouncée. Un seul work item pendant à la fois :
+    /// pas d'allocation par événement, et la sauvegarde part au plus tard
+    /// `debounceInterval` après le premier événement (activité continue
+    /// comprise — pas de report indéfini).
     func scheduleSave() {
-        saveWorkItem?.cancel()
+        guard saveWorkItem == nil else { return }
         let work = DispatchWorkItem { [weak self] in self?.saveNow() }
         saveWorkItem = work
         queue.asyncAfter(deadline: .now() + debounceInterval, execute: work)
@@ -47,6 +50,7 @@ final class StatsStore {
     /// Écrit immédiatement sur le disque.
     func saveNow() {
         saveWorkItem?.cancel()
+        saveWorkItem = nil
         let snapshot = days
         do {
             let encoder = JSONEncoder()
