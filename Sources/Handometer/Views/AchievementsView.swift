@@ -54,11 +54,67 @@ struct AchievementsView: View {
                 .labelsHidden()
 
                 let unlocks = state.achievements(for: scope)
+
+                nextUpSection(unlocks: unlocks)
+
                 ForEach(categories, id: \.self) { category in
                     categorySection(category: category, unlocks: unlocks)
                 }
             }
             .padding()
+        }
+    }
+
+    private struct NextUpCandidate: Identifiable {
+        let definition: AchievementDefinition
+        let progress: Double
+        var id: String { definition.id }
+    }
+
+    /// Les 3 défis verrouillés les plus proches du déblocage, pour donner un
+    /// objectif immédiat.
+    private func nextUpCandidates(unlocks: [UnlockedAchievement]) -> [NextUpCandidate] {
+        let unlockedKinds = Set(unlocks.map(\.kind))
+        var candidates: [NextUpCandidate] = []
+        for definition in AchievementDefinition.all {
+            guard definition.scope == scope, !unlockedKinds.contains(definition.kind) else { continue }
+            let progress = AchievementEvaluator.progress(
+                for: definition,
+                today: state.today,
+                history: state.history,
+                globalKeyCounts: state.globalKeyCounts,
+                currentDayKey: state.currentDayKey
+            )
+            if progress > 0 && progress < 1 {
+                candidates.append(NextUpCandidate(definition: definition, progress: progress))
+            }
+        }
+        candidates.sort { $0.progress > $1.progress }
+        return Array(candidates.prefix(3))
+    }
+
+    @ViewBuilder
+    private func nextUpSection(unlocks: [UnlockedAchievement]) -> some View {
+        let candidates = nextUpCandidates(unlocks: unlocks)
+        if !candidates.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 8) {
+                    Image(systemName: "target")
+                        .foregroundStyle(.orange)
+                    Text("Next up")
+                        .font(.headline)
+                }
+
+                LazyVGrid(columns: columns, spacing: 12) {
+                    ForEach(candidates) { candidate in
+                        AchievementBadgeTile(
+                            definition: candidate.definition,
+                            unlock: nil,
+                            progress: candidate.progress
+                        )
+                    }
+                }
+            }
         }
     }
 

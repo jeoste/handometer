@@ -5,11 +5,10 @@ enum AchievementEvaluator {
         today: DayStats,
         history: [DayStats],
         globalKeyCounts: [String: Int],
-        alreadyUnlocked: [UnlockedAchievement],
+        alreadyUnlockedKeys existingKeys: Set<String>,
         currentDayKey: String,
         includeDaily: Bool = true
     ) -> [UnlockedAchievement] {
-        let existingKeys = Set(alreadyUnlocked.map(\.uniquenessKey))
         var results: [UnlockedAchievement] = []
 
         let scopes: [AchievementScope] = includeDaily ? [.daily, .allTime] : [.allTime]
@@ -107,7 +106,49 @@ enum AchievementEvaluator {
 
         case .streakDays:
             return (streakDays(history: history, currentDayKey: currentDayKey), nil)
+
+        case .spaceKeys:
+            return (keyCount(SpecialKey.space, daily: daily, today: today, globalKeyCounts: globalKeyCounts), nil)
+
+        case .backspaceKeys:
+            return (keyCount(SpecialKey.backspace, daily: daily, today: today, globalKeyCounts: globalKeyCounts), nil)
+
+        case .escKeys:
+            return (keyCount(SpecialKey.esc, daily: daily, today: today, globalKeyCounts: globalKeyCounts), nil)
+
+        case .enterKeys:
+            return (keyCount(SpecialKey.enter, daily: daily, today: today, globalKeyCounts: globalKeyCounts), nil)
+
+        case .arrowKeys:
+            let total = SpecialKey.arrows.reduce(0.0) {
+                $0 + keyCount($1, daily: daily, today: today, globalKeyCounts: globalKeyCounts)
+            }
+            return (total, nil)
+
+        case .uniqueKeys:
+            return (Double(today.keyCounts.count), nil)
+
+        case .movementSeconds:
+            return (daily ? today.movementSeconds : history.reduce(0) { $0 + $1.movementSeconds }, nil)
         }
+    }
+
+    /// Libellés produits par `EventMonitor.label(for:)` pour les touches spéciales.
+    private enum SpecialKey {
+        static let space = "⎵ Space"
+        static let backspace = "⌫ Backspace"
+        static let esc = "⎋ Esc"
+        static let enter = "↩ Enter"
+        static let arrows = ["← Left", "→ Right", "↓ Down", "↑ Up"]
+    }
+
+    private static func keyCount(
+        _ label: String,
+        daily: Bool,
+        today: DayStats,
+        globalKeyCounts: [String: Int]
+    ) -> Double {
+        Double((daily ? today.keyCounts : globalKeyCounts)[label] ?? 0)
     }
 
     static func totalMouseDistanceCm(in history: [DayStats]) -> Double {

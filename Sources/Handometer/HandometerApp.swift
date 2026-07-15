@@ -67,15 +67,18 @@ private struct MenuBarStatsSnapshot {
     var maxSpeed = ""
     var clicks = 0
     var keystrokes = 0
+    var levelLabel = ""
 
     init() {}
 
-    init(from stats: DayStats) {
+    init(from stats: DayStats, level: PlayerLevel) {
         let units = UnitPreferences.shared
         mouseDistance = units.formatDistance(cm: stats.mouseDistanceCm)
         maxSpeed = units.formatSpeed(kmh: stats.maxSpeedKmh)
         clicks = stats.totalClicks
         keystrokes = stats.totalKeystrokes
+        let stars = level.prestige > 0 ? " " + String(repeating: "★", count: level.prestige) : ""
+        levelLabel = "Level \(level.level)\(stars) — \(Int(level.progress * 100))%"
     }
 }
 
@@ -93,6 +96,11 @@ struct MenuBarContent: View {
 
     var body: some View {
         Group {
+            Button(stats.levelLabel) {}
+                .disabled(true)
+
+            Divider()
+
             Button("Today") {}
                 .font(.headline)
                 .disabled(true)
@@ -143,7 +151,7 @@ struct MenuBarContent: View {
 
     @MainActor
     private func refreshFromState() {
-        stats = MenuBarStatsSnapshot(from: state.today)
+        stats = MenuBarStatsSnapshot(from: state.today, level: state.playerLevel)
         isTrusted = state.isTrusted
         needsAccessibilityRegrant = state.needsAccessibilityRegrant
     }

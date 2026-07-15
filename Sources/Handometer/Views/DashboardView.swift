@@ -13,6 +13,9 @@ struct DashboardView: View {
                 permissionBanner
             }
 
+            LevelBadgeView(playerLevel: state.playerLevel)
+            Divider()
+
             if let unlock = state.pendingUnlock {
                 AchievementUnlockBanner(
                     unlock: unlock,
@@ -30,6 +33,9 @@ struct DashboardView: View {
 
                 AchievementsView(state: state)
                     .tabItem { Label("Achievements", systemImage: "trophy.fill") }
+
+                LeaderboardView(state: state)
+                    .tabItem { Label("Ranking", systemImage: "list.number") }
             }
 
             Divider()

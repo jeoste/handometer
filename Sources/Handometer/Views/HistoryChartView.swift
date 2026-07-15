@@ -138,6 +138,8 @@ struct HistoryChartView: View {
 
                     periodSummary
 
+                    recordsSection
+
                     trendSection
 
                     if !keyCounts.isEmpty {
@@ -186,6 +188,56 @@ struct HistoryChartView: View {
                 )
             }
         }
+    }
+
+    // MARK: - Records personnels
+
+    /// Meilleurs jours toutes catégories : les records personnels de l'utilisateur.
+    private var recordsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Personal records")
+                .font(.headline)
+
+            LazyVGrid(columns: summaryColumns, spacing: 12) {
+                if let best = history.max(by: { $0.totalKeystrokes < $1.totalKeystrokes }), best.totalKeystrokes > 0 {
+                    StatCard(
+                        title: "Most keystrokes",
+                        value: "\(best.totalKeystrokes)",
+                        systemImage: "keyboard.badge.ellipsis",
+                        subtitle: recordDate(best.date)
+                    )
+                }
+                if let best = history.max(by: { $0.mouseDistanceCm < $1.mouseDistanceCm }), best.mouseDistanceCm > 0 {
+                    StatCard(
+                        title: "Longest ride",
+                        value: units.formatDistance(cm: best.mouseDistanceCm),
+                        systemImage: "medal.fill",
+                        subtitle: recordDate(best.date)
+                    )
+                }
+                if let best = history.max(by: { $0.totalClicks < $1.totalClicks }), best.totalClicks > 0 {
+                    StatCard(
+                        title: "Most clicks",
+                        value: "\(best.totalClicks)",
+                        systemImage: "hand.tap.fill",
+                        subtitle: recordDate(best.date)
+                    )
+                }
+                if let best = history.max(by: { $0.maxSpeedKmh < $1.maxSpeedKmh }), best.maxSpeedKmh > 0 {
+                    StatCard(
+                        title: "Top speed",
+                        value: units.formatSpeed(kmh: best.maxSpeedKmh),
+                        systemImage: "trophy.fill",
+                        subtitle: recordDate(best.date)
+                    )
+                }
+            }
+        }
+    }
+
+    private func recordDate(_ dayKey: String) -> String {
+        guard let date = DateFormatter.dayKey.date(from: dayKey) else { return dayKey }
+        return DateFormatter.dayDisplay.string(from: date)
     }
 
     // MARK: - Graphique de tendance

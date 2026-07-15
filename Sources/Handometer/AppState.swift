@@ -36,6 +36,7 @@ final class AppState: ObservableObject {
     private var dayCheckTimer: Timer?
     private var bannerDismissWorkItem: DispatchWorkItem?
     private var permissionTimer: Timer?
+    private var leaderboardTimer: Timer?
     private var uiSyncWorkItem: DispatchWorkItem?
     private var isRunning = false
 
@@ -95,12 +96,21 @@ final class AppState: ObservableObject {
         permissionTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.pollPermissionState() }
         }
+        // Soumission périodique au classement (no-op si non configuré / opt-out).
+        leaderboardTimer = Timer.scheduledTimer(withTimeInterval: 600, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let today = self.store.stats(for: self.currentDayKey)
+                Task { await Leaderboard.submit(today: today) }
+            }
+        }
     }
 
     func stop() {
         monitor.stop()
         dayCheckTimer?.invalidate()
         permissionTimer?.invalidate()
+        leaderboardTimer?.invalidate()
         flushUISync()
         store.saveNow()
         achievementStore.saveNow()
@@ -111,6 +121,15 @@ final class AppState: ObservableObject {
 
     /// Nombre total de frappes sur toutes les journées enregistrées.
     var totalKeystrokes: Int { history.totalKeystrokes }
+
+    /// Niveau de progression, dérivé des stats cumulées + bonus d'achievements.
+    var playerLevel: PlayerLevel {
+        let base = Double(history.totalKeystrokes) * PlayerLevel.xpPerKeystroke
+            + history.totalMouseDistanceCm * PlayerLevel.xpPerCm
+            + Double(history.totalClicks) * PlayerLevel.xpPerClick
+        let bonus = achievements.reduce(0.0) { $0 + $1.definition.tier.xpBonus }
+        return PlayerLevel(lifetimeXP: base + bonus)
+    }
 
     // MARK: - Configuration du moniteur
 
@@ -211,7 +230,7 @@ final class AppState: ObservableObject {
             today: today,
             history: history,
             globalKeyCounts: globalKeyCounts,
-            alreadyUnlocked: achievementStore.unlocks,
+            alreadyUnlockedKeys: achievementStore.unlockedKeys,
             currentDayKey: currentDayKey
         )
         let added = achievementStore.add(newUnlocks, dayKey: currentDayKey)

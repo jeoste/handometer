@@ -13,6 +13,7 @@ enum AchievementCategory: String, Codable, CaseIterable {
     case clicks
     case speed
     case streak
+    case exotic
 
     /// Couleur néon principale de la catégorie.
     var accent: Color {
@@ -22,6 +23,7 @@ enum AchievementCategory: String, Codable, CaseIterable {
         case .clicks:   return Color(red: 0.46, green: 0.98, blue: 0.32) // vert lime
         case .speed:    return Color(red: 0.99, green: 0.82, blue: 0.16) // ambre néon
         case .streak:   return Color(red: 0.99, green: 0.44, blue: 0.14) // orange flamme
+        case .exotic:   return Color(red: 0.72, green: 0.36, blue: 0.99) // violet ovni
         }
     }
 
@@ -33,6 +35,7 @@ enum AchievementCategory: String, Codable, CaseIterable {
         case .clicks:   return "CLICKS"
         case .speed:    return "SPEED"
         case .streak:   return "STREAK"
+        case .exotic:   return "EXOTIC"
         }
     }
 
@@ -44,6 +47,7 @@ enum AchievementCategory: String, Codable, CaseIterable {
         case .clicks:   return "cursorarrow.click.2"
         case .speed:    return "bolt.fill"
         case .streak:   return "flame.fill"
+        case .exotic:   return "sparkles"
         }
     }
 
@@ -55,6 +59,7 @@ enum AchievementCategory: String, Codable, CaseIterable {
         case .clicks:   return 2
         case .speed:    return 3
         case .streak:   return 4
+        case .exotic:   return 5
         }
     }
 }
