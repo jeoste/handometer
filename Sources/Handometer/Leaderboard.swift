@@ -111,11 +111,12 @@ enum Leaderboard {
 
     /// Dernier total d'XP de trophées connu, persisté pour que le niveau reste
     /// stable hors-ligne (rafraîchi à chaque fetch de la collection).
+    /// Cache mémoire : `trophyXP` est lu à chaque calcul de `playerLevel`
+    /// (plusieurs fois par seconde) — pas d'accès UserDefaults sur ce chemin.
     private static let trophyXPKey = "leaderboardTrophyXP"
+    private static var cachedTrophyXP = UserDefaults.standard.integer(forKey: trophyXPKey)
 
-    static var trophyXP: Int {
-        UserDefaults.standard.integer(forKey: trophyXPKey)
-    }
+    static var trophyXP: Int { cachedTrophyXP }
 
     /// Récupère la collection de trophées et met en cache son total d'XP.
     static func fetchTrophies() async throws -> TrophyCollection {
@@ -127,6 +128,7 @@ enum Leaderboard {
         request.timeoutInterval = 10
         let (data, _) = try await URLSession.shared.data(for: request)
         let collection = try JSONDecoder().decode(TrophyCollection.self, from: data)
+        cachedTrophyXP = collection.totalXp
         UserDefaults.standard.set(collection.totalXp, forKey: trophyXPKey)
         return collection
     }

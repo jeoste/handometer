@@ -7,6 +7,9 @@ import CoreGraphics
 final class DisplayMetrics {
     /// mm par pixel, mis en cache par identifiant d'écran.
     private var mmPerPixelCache: [CGDirectDisplayID: Double] = [:]
+    /// Hauteur de l'écran principal, cachée : `NSScreen.screens` alloue un
+    /// array bridgé ObjC et ce chemin s'exécute à chaque événement souris.
+    private var primaryScreenHeight: CGFloat?
 
     init() {
         NotificationCenter.default.addObserver(
@@ -19,6 +22,7 @@ final class DisplayMetrics {
 
     @objc private func screenParametersChanged() {
         mmPerPixelCache.removeAll()
+        primaryScreenHeight = nil
     }
 
     /// Convertit une distance pixel en cm pour l'écran situé sous `point`
@@ -55,7 +59,10 @@ final class DisplayMetrics {
         // CGGetDisplaysWithPoint attend des coordonnées avec l'origine en HAUT
         // à gauche ; NSEvent.mouseLocation utilise l'origine en BAS à gauche.
         // On convertit via la hauteur de l'écran principal.
-        guard let primaryHeight = NSScreen.screens.first?.frame.height else { return nil }
+        if primaryScreenHeight == nil {
+            primaryScreenHeight = NSScreen.screens.first?.frame.height
+        }
+        guard let primaryHeight = primaryScreenHeight else { return nil }
         let flipped = CGPoint(x: point.x, y: primaryHeight - point.y)
 
         var displayID = CGDirectDisplayID()
