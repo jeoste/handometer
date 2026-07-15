@@ -6,10 +6,8 @@ import Foundation
 /// partage. Seuls les totaux du jour sont envoyés (frappes, distance, clics),
 /// jamais le détail par touche. L'identité est un UUID aléatoire + un pseudo.
 enum Leaderboard {
-    /// URL de base du déploiement Vercel (ex. "https://handometer.vercel.app").
-    /// Vide tant que le backend n'est pas déployé : la fonctionnalité reste
-    /// affichée comme « à venir » et aucune requête ne part.
-    static let baseURLString = ""
+    /// URL de base du déploiement Vercel.
+    static let baseURLString = "https://handometer.vercel.app"
 
     static var isConfigured: Bool { !baseURLString.isEmpty }
 
