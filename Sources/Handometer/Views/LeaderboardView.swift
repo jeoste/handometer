@@ -6,6 +6,7 @@ struct LeaderboardView: View {
 
     @State private var period: Leaderboard.Period = .daily
     @State private var standings: Leaderboard.Standings?
+    @State private var trophies: [Leaderboard.Trophy] = []
     @State private var isLoading = false
     @State private var loadFailed = false
     @State private var optedIn = Leaderboard.isOptedIn
@@ -29,6 +30,10 @@ struct LeaderboardView: View {
                         .labelsHidden()
 
                         standingsSection
+
+                        if !trophies.isEmpty {
+                            trophyCase
+                        }
                     }
                 }
             }
@@ -127,6 +132,11 @@ struct LeaderboardView: View {
             Text(entry.name)
                 .font(.subheadline.weight(entry.isMe ? .bold : .regular))
                 .lineLimit(1)
+            if entry.trophies > 0 {
+                Text("🏆\(entry.trophies)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
             if entry.isMe {
                 Text("YOU")
                     .font(.caption2.bold())
@@ -156,6 +166,48 @@ struct LeaderboardView: View {
             .background(.tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
     }
 
+    // MARK: - Vitrine de trophées
+
+    /// Podiums de fin de période remportés (jour, semaine, mois, trimestre, année).
+    private var trophyCase: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Trophy case", systemImage: "trophy.fill")
+                .font(.headline)
+
+            ForEach(trophies) { trophy in
+                HStack(spacing: 10) {
+                    Text(rankLabel(trophy.rank))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(periodLabel(trophy.period)) champion — \(trophy.periodKey)")
+                            .font(.subheadline.weight(.semibold))
+                        Text("Rank #\(trophy.rank) · \(trophy.score) XP scored")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Text("+\(trophy.xp) XP")
+                        .font(.caption.bold().monospacedDigit())
+                        .foregroundStyle(.orange)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
+            }
+        }
+        .padding(.top, 4)
+    }
+
+    private func periodLabel(_ period: String) -> String {
+        switch period {
+        case "day":     return "Daily"
+        case "week":    return "Weekly"
+        case "month":   return "Monthly"
+        case "quarter": return "Quarterly"
+        case "year":    return "Yearly"
+        default:        return period.capitalized
+        }
+    }
+
     private func rankLabel(_ rank: Int) -> String {
         switch rank {
         case 1: return "🥇"
@@ -178,6 +230,10 @@ struct LeaderboardView: View {
             )
         } catch {
             loadFailed = true
+        }
+        // Collection de trophées : silencieux en cas d'échec (cache conservé).
+        if let collection = try? await Leaderboard.fetchTrophies() {
+            trophies = collection.trophies
         }
         isLoading = false
     }

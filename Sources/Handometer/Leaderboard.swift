@@ -49,8 +49,24 @@ enum Leaderboard {
         let rank: Int
         let name: String
         let score: Int
+        let trophies: Int
         let isMe: Bool
         var id: Int { rank }
+    }
+
+    /// Trophée de podium (top 3 d'une période close du classement).
+    struct Trophy: Decodable, Identifiable {
+        let id: String          // « day:2026-07-15 », « week:2026-W29 », …
+        let period: String      // day | week | month | quarter | year
+        let periodKey: String
+        let rank: Int
+        let xp: Int
+        let score: Int
+    }
+
+    struct TrophyCollection: Decodable {
+        let trophies: [Trophy]
+        let totalXp: Int
     }
 
     struct Standings: Decodable {
@@ -91,6 +107,28 @@ enum Leaderboard {
         request.timeoutInterval = 10
 
         _ = try? await URLSession.shared.data(for: request)
+    }
+
+    /// Dernier total d'XP de trophées connu, persisté pour que le niveau reste
+    /// stable hors-ligne (rafraîchi à chaque fetch de la collection).
+    private static let trophyXPKey = "leaderboardTrophyXP"
+
+    static var trophyXP: Int {
+        UserDefaults.standard.integer(forKey: trophyXPKey)
+    }
+
+    /// Récupère la collection de trophées et met en cache son total d'XP.
+    static func fetchTrophies() async throws -> TrophyCollection {
+        guard isConfigured, isOptedIn,
+              let url = URL(string: "\(baseURLString)/api/trophies?clientId=\(clientId)") else {
+            throw URLError(.badURL)
+        }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 10
+        let (data, _) = try await URLSession.shared.data(for: request)
+        let collection = try JSONDecoder().decode(TrophyCollection.self, from: data)
+        UserDefaults.standard.set(collection.totalXp, forKey: trophyXPKey)
+        return collection
     }
 
     static func fetchStandings(period: Period, dayKey: String) async throws -> Standings {

@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  Command,
+  isoWeekKey,
+  monthKey,
+  quarterKey,
+  redisPipeline,
+  yearKey,
+} from "@/lib/leaderboard";
 
 // Classement Handometer — voir docs/LEADERBOARD.md à la racine du repo.
 // Stockage : Upstash Redis via son API REST (aucune dépendance npm).
-
-const REDIS_URL =
-  process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL;
-const REDIS_TOKEN =
-  process.env.UPSTASH_REDIS_REST_TOKEN ?? process.env.KV_REST_API_TOKEN;
 
 // Plafonds de vraisemblance par jour (anti-triche minimal, v1 déclarative).
 const MAX_KEYSTROKES = 300_000;
@@ -16,48 +19,12 @@ const MAX_CLICKS = 100_000;
 const TOP_SIZE = 50;
 const DAILY_TTL = 3 * 86_400;
 const WEEKLY_TTL = 35 * 86_400;
+const MONTHLY_TTL = 65 * 86_400;
+const QUARTERLY_TTL = 130 * 86_400;
+const YEARLY_TTL = 400 * 86_400;
 
 const UUID_RE = /^[0-9a-fA-F-]{36}$/;
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
-
-type Command = (string | number)[];
-
-async function redisPipeline(commands: Command[]): Promise<unknown[]> {
-  if (!REDIS_URL || !REDIS_TOKEN) {
-    throw new Error("Redis credentials missing");
-  }
-  const res = await fetch(`${REDIS_URL}/pipeline`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${REDIS_TOKEN}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(commands),
-    cache: "no-store",
-  });
-  if (!res.ok) throw new Error(`Redis error ${res.status}`);
-  const results: { result: unknown; error?: string }[] = await res.json();
-  const failed = results.find((r) => r.error);
-  if (failed) throw new Error(`Redis command failed: ${failed.error}`);
-  return results.map((r) => r.result);
-}
-
-/** Semaine ISO 8601 (« 2026-W29 ») pour une clé de jour « YYYY-MM-DD ». */
-function isoWeekKey(dayKey: string): string {
-  const d = new Date(`${dayKey}T00:00:00Z`);
-  const day = (d.getUTCDay() + 6) % 7; // lundi = 0
-  d.setUTCDate(d.getUTCDate() - day + 3); // jeudi de la semaine courante
-  const week1 = new Date(Date.UTC(d.getUTCFullYear(), 0, 4));
-  const week =
-    1 +
-    Math.round(
-      ((d.getTime() - week1.getTime()) / 86_400_000 -
-        3 +
-        ((week1.getUTCDay() + 6) % 7)) /
-        7,
-    );
-  return `${d.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
-}
 
 /** dayKey plausible : date valide à ±2 jours de la date serveur. */
 function isRecentDay(dayKey: string): boolean {
@@ -115,7 +82,7 @@ export async function POST(req: NextRequest) {
   try {
     // Écritures idempotentes + lecture des scores journaliers de la semaine.
     // HGET en tête : valeur précédente du jour, pour la mise à jour
-    // incrémentale du classement all-time (delta = nouveau − précédent).
+    // incrémentale des classements longue durée (delta = nouveau − précédent).
     const results = await redisPipeline([
       ["HGET", daysHash, dayKey],
       ["HSET", "lb:names", clientId, name],
@@ -127,6 +94,7 @@ export async function POST(req: NextRequest) {
     ]);
 
     const previousDayScore = Number((results[0] as string | null) ?? 0);
+    const delta = dayScore - previousDayScore;
     const weekScore = (results[6] as string[]).reduce(
       (sum, v) => sum + Number(v),
       0,
@@ -134,8 +102,14 @@ export async function POST(req: NextRequest) {
     await redisPipeline([
       ["ZADD", `lb:w:${weekKey}`, weekScore, clientId],
       ["EXPIRE", `lb:w:${weekKey}`, WEEKLY_TTL],
-      // All-time : cumul incrémental, jamais expiré.
-      ["ZINCRBY", "lb:a", dayScore - previousDayScore, clientId],
+      // Cumuls incrémentaux : mois, trimestre, année, all-time (jamais expiré).
+      ["ZINCRBY", `lb:m:${monthKey(dayKey)}`, delta, clientId],
+      ["EXPIRE", `lb:m:${monthKey(dayKey)}`, MONTHLY_TTL],
+      ["ZINCRBY", `lb:q:${quarterKey(dayKey)}`, delta, clientId],
+      ["EXPIRE", `lb:q:${quarterKey(dayKey)}`, QUARTERLY_TTL],
+      ["ZINCRBY", `lb:y:${yearKey(dayKey)}`, delta, clientId],
+      ["EXPIRE", `lb:y:${yearKey(dayKey)}`, YEARLY_TTL],
+      ["ZINCRBY", "lb:a", delta, clientId],
     ]);
 
     return NextResponse.json({ ok: true, score: dayScore });
@@ -145,11 +119,19 @@ export async function POST(req: NextRequest) {
   }
 }
 
+const GET_KEYS: Record<string, (dayKey: string) => string> = {
+  daily: (d) => `lb:d:${d}`,
+  weekly: (d) => `lb:w:${isoWeekKey(d)}`,
+  monthly: (d) => `lb:m:${monthKey(d)}`,
+  quarterly: (d) => `lb:q:${quarterKey(d)}`,
+  yearly: (d) => `lb:y:${yearKey(d)}`,
+  alltime: () => "lb:a",
+};
+
 export async function GET(req: NextRequest) {
   const params = req.nextUrl.searchParams;
-  const rawPeriod = params.get("period");
-  const period =
-    rawPeriod === "weekly" || rawPeriod === "alltime" ? rawPeriod : "daily";
+  const rawPeriod = params.get("period") ?? "daily";
+  const period = rawPeriod in GET_KEYS ? rawPeriod : "daily";
   const dayKey = params.get("dayKey") ?? "";
   const clientId = params.get("clientId") ?? "";
 
@@ -157,12 +139,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "invalid dayKey" }, { status: 400 });
   }
 
-  const key =
-    period === "alltime"
-      ? "lb:a"
-      : period === "weekly"
-        ? `lb:w:${isoWeekKey(dayKey)}`
-        : `lb:d:${dayKey}`;
+  const key = GET_KEYS[period](dayKey);
   const wantsSelf = UUID_RE.test(clientId);
 
   try {
@@ -183,18 +160,23 @@ export async function GET(req: NextRequest) {
       scores.push(Number(flat[i + 1]));
     }
 
-    const names =
-      ids.length > 0
-        ? ((await redisPipeline([["HMGET", "lb:names", ...ids]]))[0] as (
-            | string
-            | null
-          )[])
-        : [];
+    // Pseudos + nombre de trophées des entrées du top.
+    let names: (string | null)[] = [];
+    let trophyCounts: (string | null)[] = [];
+    if (ids.length > 0) {
+      const meta = await redisPipeline([
+        ["HMGET", "lb:names", ...ids],
+        ["HMGET", "lb:trophycount", ...ids],
+      ]);
+      names = meta[0] as (string | null)[];
+      trophyCounts = meta[1] as (string | null)[];
+    }
 
     const entries = ids.map((id, i) => ({
       rank: i + 1,
       name: names[i] ?? "Anonymous",
-      score: scores[i],
+      score: Math.round(scores[i]),
+      trophies: Number(trophyCounts[i] ?? 0),
       isMe: wantsSelf && id === clientId,
     }));
 

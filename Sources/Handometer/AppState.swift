@@ -128,7 +128,7 @@ final class AppState: ObservableObject {
             + history.totalMouseDistanceCm * PlayerLevel.xpPerCm
             + Double(history.totalClicks) * PlayerLevel.xpPerClick
         let bonus = achievements.reduce(0.0) { $0 + $1.definition.tier.xpBonus }
-        return PlayerLevel(lifetimeXP: base + bonus)
+        return PlayerLevel(lifetimeXP: base + bonus + Double(Leaderboard.trophyXP))
     }
 
     // MARK: - Configuration du moniteur

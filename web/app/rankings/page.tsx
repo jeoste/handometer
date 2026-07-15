@@ -12,6 +12,7 @@ type Entry = {
   rank: number;
   name: string;
   score: number;
+  trophies: number;
   isMe: boolean;
 };
 
@@ -123,6 +124,11 @@ export default function Rankings() {
                   </span>
                   <span className="flex-1 truncate text-sm text-zinc-900">
                     {entry.name}
+                    {entry.trophies > 0 && (
+                      <span className="ml-2 text-xs text-zinc-400">
+                        🏆 {entry.trophies}
+                      </span>
+                    )}
                   </span>
                   <span className="text-sm tabular-nums text-zinc-500">
                     {entry.score.toLocaleString()} XP
