@@ -44,7 +44,7 @@ struct LeaderboardView: View {
             Leaderboard.isOptedIn = newValue
             if newValue {
                 Task {
-                    await Leaderboard.submit(today: state.today)
+                    await Leaderboard.submit(today: state.today, lifetimeXP: state.playerLevel.lifetimeXP)
                     await refresh()
                 }
             }
@@ -115,7 +115,7 @@ struct LeaderboardView: View {
 
             Button {
                 Task {
-                    await Leaderboard.submit(today: state.today)
+                    await Leaderboard.submit(today: state.today, lifetimeXP: state.playerLevel.lifetimeXP)
                     await refresh()
                 }
             } label: {

@@ -16,6 +16,9 @@ const MAX_KEYSTROKES = 300_000;
 const MAX_DISTANCE_CM = 500_000; // 5 km
 const MAX_CLICKS = 100_000;
 
+// XP lifetime déclarée par le client (plafond de vraisemblance large).
+const MAX_LIFETIME_XP = 100_000_000;
+
 const TOP_SIZE = 50;
 const DAILY_TTL = 3 * 86_400;
 const WEEKLY_TTL = 35 * 86_400;
@@ -116,6 +119,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid payload" }, { status: 400 });
   }
 
+  // Optionnelle : absente chez les anciens clients (repli sur delta).
+  const lifetimeXp =
+    body.lifetimeXp === undefined
+      ? null
+      : clampCount(body.lifetimeXp, MAX_LIFETIME_XP);
+
   const dayScore = score(keystrokes, distanceCm, clicks);
   const weekKey = isoWeekKey(dayKey);
   const daysHash = `lb:days:${weekKey}:${clientId}`;
@@ -154,7 +163,13 @@ export async function POST(req: NextRequest) {
       ["EXPIRE", `lb:q:${quarterKey(dayKey)}`, QUARTERLY_TTL],
       ["ZINCRBY", `lb:y:${yearKey(dayKey)}`, delta, clientId],
       ["EXPIRE", `lb:y:${yearKey(dayKey)}`, YEARLY_TTL],
-      ["ZINCRBY", "lb:a", delta, clientId],
+      // All-time = XP lifetime totale de l'app (historique complet + bonus),
+      // envoyée par le client et écrite telle quelle — cohérente avec le
+      // niveau affiché localement. Repli sur le cumul par delta pour les
+      // anciens clients qui ne l'envoient pas.
+      lifetimeXp !== null
+        ? ["ZADD", "lb:a", lifetimeXp, clientId]
+        : ["ZINCRBY", "lb:a", delta, clientId],
     ]);
 
     return NextResponse.json({ ok: true, score: dayScore, displayName: name });

@@ -101,7 +101,7 @@ final class AppState: ObservableObject {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 let today = self.store.stats(for: self.currentDayKey)
-                Task { await Leaderboard.submit(today: today) }
+                Task { await Leaderboard.submit(today: today, lifetimeXP: self.playerLevel.lifetimeXP) }
             }
         }
     }

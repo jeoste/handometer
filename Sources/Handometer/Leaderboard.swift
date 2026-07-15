@@ -85,9 +85,11 @@ enum Leaderboard {
         URL(string: "\(baseURLString)/api/leaderboard")
     }
 
-    /// Envoie les totaux du jour (fire-and-forget, silencieux en cas d'échec :
-    /// la prochaine soumission écrase de toute façon).
-    static func submit(today: DayStats) async {
+    /// Envoie les totaux du jour et l'XP lifetime (fire-and-forget, silencieux
+    /// en cas d'échec : la prochaine soumission écrase de toute façon).
+    /// `lifetimeXP` alimente le classement all-time : c'est la même valeur que
+    /// le niveau local (historique complet + bonus), pas un cumul serveur.
+    static func submit(today: DayStats, lifetimeXP: Double) async {
         guard isConfigured, isOptedIn, let endpoint else { return }
 
         let payload: [String: Any] = [
@@ -96,7 +98,8 @@ enum Leaderboard {
             "dayKey": today.date,
             "keystrokes": today.totalKeystrokes,
             "distanceCm": today.mouseDistanceCm,
-            "clicks": today.totalClicks
+            "clicks": today.totalClicks,
+            "lifetimeXp": Int(lifetimeXP)
         ]
         guard let body = try? JSONSerialization.data(withJSONObject: payload) else { return }
 
