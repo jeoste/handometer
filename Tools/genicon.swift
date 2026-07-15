@@ -7,14 +7,18 @@ import UniformTypeIdentifiers
 
 func deg(_ d: CGFloat) -> CGFloat { d * .pi / 180 }
 
-func makeContext(_ px: Int) -> CGContext {
+func makeContext(width: Int, height: Int) -> CGContext {
     let cs = CGColorSpaceCreateDeviceRGB()
-    let ctx = CGContext(data: nil, width: px, height: px, bitsPerComponent: 8,
+    let ctx = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
                         bytesPerRow: 0, space: cs,
                         bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
     ctx.setAllowsAntialiasing(true)
     ctx.interpolationQuality = .high
     return ctx
+}
+
+func makeContext(_ px: Int) -> CGContext {
+    makeContext(width: px, height: px)
 }
 
 func writePNG(_ ctx: CGContext, to path: String) {
@@ -123,6 +127,43 @@ func drawMenuBar(_ px: Int) -> CGContext {
     return ctx
 }
 
+// MARK: - Brand logo (white gauge + « Handometer » wordmark, fond transparent)
+
+/// Logo horizontal utilisé sur les cartes d'achievement (fond sombre) :
+/// même jauge que l'icône d'app, suivie du wordmark en SF Rounded bold.
+/// Retourne un contexte dont la largeur dépend du texte mesuré.
+func drawBrandLogo(height: Int) -> CGContext {
+    let H = CGFloat(height)
+    let tint = NSColor(white: 1, alpha: 0.92)
+
+    let font: NSFont = {
+        let base = NSFont.systemFont(ofSize: H * 0.56, weight: .bold)
+        if let rounded = base.fontDescriptor.withDesign(.rounded),
+           let f = NSFont(descriptor: rounded, size: base.pointSize) {
+            return f
+        }
+        return base
+    }()
+    let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: tint]
+    let text = NSAttributedString(string: "Handometer", attributes: attributes)
+    let textSize = text.size()
+
+    let gaugeSide = H
+    let spacing = H * 0.18
+    let width = Int((gaugeSide + spacing + textSize.width).rounded(.up))
+
+    let ctx = makeContext(width: width, height: height)
+    drawGauge(ctx, S: gaugeSide, tint: tint.cgColor, scale: 0.85)
+
+    let gc = NSGraphicsContext(cgContext: ctx, flipped: false)
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = gc
+    text.draw(at: NSPoint(x: gaugeSide + spacing, y: (H - textSize.height) / 2))
+    NSGraphicsContext.restoreGraphicsState()
+
+    return ctx
+}
+
 // MARK: - Output
 
 let outDir = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "."
@@ -144,6 +185,10 @@ for e in entries {
 // Menu bar template images (18pt @1x/@2x)
 writePNG(drawMenuBar(18), to: "\(outDir)/menubar.png")
 writePNG(drawMenuBar(36), to: "\(outDir)/menubar@2x.png")
+
+// Brand logo (cartes d'achievement) — même jauge que l'icône d'app
+writePNG(drawBrandLogo(height: 41), to: "\(outDir)/brand-logo.png")
+writePNG(drawBrandLogo(height: 82), to: "\(outDir)/brand-logo@2x.png")
 
 // A standalone large preview
 writePNG(drawAppIcon(512), to: "\(outDir)/preview.png")

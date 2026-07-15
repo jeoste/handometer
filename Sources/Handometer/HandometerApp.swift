@@ -51,7 +51,7 @@ struct HandometerApp: App {
             img.isTemplate = true
             return img
         }
-        let fallback = NSImage(systemSymbolName: "cursorarrow.motionlines",
+        let fallback = NSImage(systemSymbolName: "gauge.with.dots.needle.67percent",
                                accessibilityDescription: "Handometer")
             ?? NSImage()
         fallback.isTemplate = true

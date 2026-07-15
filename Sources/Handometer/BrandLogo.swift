@@ -6,7 +6,9 @@ enum BrandLogo {
     static let image: NSImage = {
         if let url = Bundle.main.url(forResource: "brand-logo@2x", withExtension: "png"),
            let img = NSImage(contentsOf: url) {
-            img.size = NSSize(width: 203, height: 41)
+            // Taille logique = pixels / 2 (rétine), quelle que soit la largeur
+            // générée par Tools/genicon.swift.
+            img.size = NSSize(width: img.size.width / 2, height: img.size.height / 2)
             return img
         }
         if let url = Bundle.main.url(forResource: "brand-logo", withExtension: "png"),
@@ -32,7 +34,7 @@ struct BrandLogoView: View {
                 .frame(height: height)
         } else {
             HStack(spacing: 8) {
-                Image(systemName: "cursorarrow.motionlines")
+                Image(systemName: "gauge.with.dots.needle.67percent")
                     .font(.system(size: height * 0.64, weight: .bold))
                 Text("Handometer")
                     .font(.system(size: height * 0.78, weight: .bold, design: .rounded))
