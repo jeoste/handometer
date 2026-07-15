@@ -6,6 +6,14 @@
         <description>Mises à jour de Handometer</description>
         <language>fr</language>
         <item>
+            <title>v1.0.21</title>
+            <pubDate>Wed, 15 Jul 2026 13:46:29 +0000</pubDate>
+            <sparkle:version>26</sparkle:version>
+            <sparkle:shortVersionString>1.0.21</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/jeoste/handometer/releases/download/v1.0.21/Handometer-1.0.21.zip" length="1598939" type="application/octet-stream" sparkle:edSignature="noIIgjCgJmCTG1S9P8uRzWueqa05RBe96irPykm8NqxqdvYKuU2cI4LKw/A9KOZrVD13JPA+CLQLfTAShceIDw==" />
+        </item>
+        <item>
             <title>v1.0.20</title>
             <pubDate>Wed, 15 Jul 2026 12:55:01 +0000</pubDate>
             <sparkle:version>25</sparkle:version>
