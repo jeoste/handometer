@@ -114,7 +114,10 @@ export async function POST(req: NextRequest) {
 
   try {
     // Écritures idempotentes + lecture des scores journaliers de la semaine.
+    // HGET en tête : valeur précédente du jour, pour la mise à jour
+    // incrémentale du classement all-time (delta = nouveau − précédent).
     const results = await redisPipeline([
+      ["HGET", daysHash, dayKey],
       ["HSET", "lb:names", clientId, name],
       ["ZADD", `lb:d:${dayKey}`, dayScore, clientId],
       ["EXPIRE", `lb:d:${dayKey}`, DAILY_TTL],
@@ -123,13 +126,16 @@ export async function POST(req: NextRequest) {
       ["HVALS", daysHash],
     ]);
 
-    const weekScore = (results[5] as string[]).reduce(
+    const previousDayScore = Number((results[0] as string | null) ?? 0);
+    const weekScore = (results[6] as string[]).reduce(
       (sum, v) => sum + Number(v),
       0,
     );
     await redisPipeline([
       ["ZADD", `lb:w:${weekKey}`, weekScore, clientId],
       ["EXPIRE", `lb:w:${weekKey}`, WEEKLY_TTL],
+      // All-time : cumul incrémental, jamais expiré.
+      ["ZINCRBY", "lb:a", dayScore - previousDayScore, clientId],
     ]);
 
     return NextResponse.json({ ok: true, score: dayScore });
@@ -141,16 +147,22 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   const params = req.nextUrl.searchParams;
-  const period = params.get("period") === "weekly" ? "weekly" : "daily";
+  const rawPeriod = params.get("period");
+  const period =
+    rawPeriod === "weekly" || rawPeriod === "alltime" ? rawPeriod : "daily";
   const dayKey = params.get("dayKey") ?? "";
   const clientId = params.get("clientId") ?? "";
 
-  if (!DAY_RE.test(dayKey) || !isRecentDay(dayKey)) {
+  if (period !== "alltime" && (!DAY_RE.test(dayKey) || !isRecentDay(dayKey))) {
     return NextResponse.json({ error: "invalid dayKey" }, { status: 400 });
   }
 
   const key =
-    period === "weekly" ? `lb:w:${isoWeekKey(dayKey)}` : `lb:d:${dayKey}`;
+    period === "alltime"
+      ? "lb:a"
+      : period === "weekly"
+        ? `lb:w:${isoWeekKey(dayKey)}`
+        : `lb:d:${dayKey}`;
   const wantsSelf = UUID_RE.test(clientId);
 
   try {

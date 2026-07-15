@@ -23,6 +23,7 @@ struct LeaderboardView: View {
                         Picker("Period", selection: $period) {
                             Text("Today").tag(Leaderboard.Period.daily)
                             Text("This week").tag(Leaderboard.Period.weekly)
+                            Text("All-time").tag(Leaderboard.Period.allTime)
                         }
                         .pickerStyle(.segmented)
                         .labelsHidden()

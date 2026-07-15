@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import { DownloadButton } from "@/components/download-button";
 
 const features = [
@@ -53,7 +54,15 @@ export default function Home() {
           />
           <span className="text-sm font-semibold tracking-tight">Handometer</span>
         </div>
-        <DownloadButton className="!px-4 !py-2 text-xs" />
+        <div className="flex items-center gap-5">
+          <Link
+            href="/rankings"
+            className="text-sm text-zinc-600 hover:text-zinc-900"
+          >
+            Rankings
+          </Link>
+          <DownloadButton className="!px-4 !py-2 text-xs" />
+        </div>
       </header>
 
       <main className="flex flex-1 flex-col">

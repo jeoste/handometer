@@ -14,6 +14,7 @@ enum Leaderboard {
     enum Period: String, CaseIterable {
         case daily
         case weekly
+        case allTime = "alltime"
     }
 
     // MARK: - Préférences (UserDefaults)
