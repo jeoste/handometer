@@ -26,6 +26,7 @@ struct HandometerApp: App {
         MenuBarExtra {
             MenuBarContent(
                 state: state,
+                updater: updater,
                 openDashboard: {
                     openWindow(id: "dashboard")
                     NSApp.activate(ignoringOtherApps: true)
@@ -85,6 +86,7 @@ private struct MenuBarStatsSnapshot {
 /// Contenu du menu déroulant de la barre de menu.
 struct MenuBarContent: View {
     let state: AppState
+    @ObservedObject var updater: Updater
     let openDashboard: () -> Void
     let openSettings: (SettingsTab) -> Void
 
@@ -124,6 +126,17 @@ struct MenuBarContent: View {
             Button("Settings…") { openSettings(.general) }
 
             Divider()
+
+            // Mise à jour : téléchargée en arrière-plan par Sparkle ; un clic
+            // installe et relance. Sinon, vérification manuelle classique.
+            if updater.updateReady {
+                Button("↓ Update ready\(updater.readyVersion.map { " (v\($0))" } ?? "") — Restart now") {
+                    updater.installAndRelaunch()
+                }
+            } else {
+                Button("Check for Updates…") { updater.checkForUpdates() }
+                    .disabled(!updater.canCheckForUpdates)
+            }
 
             Button("About Handometer…") { openSettings(.about) }
             Button("Quit") { NSApp.terminate(nil) }
