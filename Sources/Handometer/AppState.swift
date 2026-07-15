@@ -26,6 +26,10 @@ final class AppState: ObservableObject {
     @Published var launchAtLogin: Bool = LoginItem.isEnabled
     /// Achievements débloqués (tous scopes).
     @Published private(set) var achievements: [UnlockedAchievement] = []
+    /// Compteurs de touches cumulés sur toutes les journées.
+    /// Cache incrémental : mis à jour à chaque frappe, reconstruit quand
+    /// l'historique est rechargé (évite un merge complet à chaque accès).
+    private(set) var globalKeyCounts: [String: Int] = [:]
     /// Dernier unlock en attente d'affichage (bannière / preview).
     @Published var pendingUnlock: UnlockedAchievement?
 
@@ -35,10 +39,11 @@ final class AppState: ObservableObject {
     private var uiSyncWorkItem: DispatchWorkItem?
     private var isRunning = false
 
-    /// Intervalle minimum entre deux rafraîchissements UI déclenchés par la souris.
-    /// Les mouvements sont toujours enregistrés ; seule la publication SwiftUI
-    /// est limitée pour éviter des centaines de re-rendus par seconde.
-    private let mouseUISyncInterval: TimeInterval = 0.5
+    /// Intervalle minimum entre deux rafraîchissements UI (souris, clics et
+    /// frappes). Les événements sont toujours enregistrés ; seule la
+    /// publication SwiftUI est limitée pour éviter des centaines de re-rendus
+    /// et d'évaluations d'achievements par seconde.
+    private let uiSyncInterval: TimeInterval = 0.5
 
     /// Horodatage du dernier événement souris, pour calculer la vitesse.
     private var lastMouseTimestamp: TimeInterval?
@@ -107,9 +112,6 @@ final class AppState: ObservableObject {
     /// Nombre total de frappes sur toutes les journées enregistrées.
     var totalKeystrokes: Int { history.totalKeystrokes }
 
-    /// Compteurs de touches cumulés sur toutes les journées.
-    var globalKeyCounts: [String: Int] { history.aggregatedKeyCounts }
-
     // MARK: - Configuration du moniteur
 
     private func configureMonitor() {
@@ -154,14 +156,15 @@ final class AppState: ObservableObject {
     private func recordClick(_ button: MouseButton) {
         checkDayRollover()
         store.incrementClick(button, in: currentDayKey)
-        syncPublishedStats()
+        scheduleUISync()
         store.scheduleSave()
     }
 
     private func recordKey(_ label: String) {
         checkDayRollover()
         store.incrementKey(label, in: currentDayKey)
-        syncPublishedStats()
+        globalKeyCounts[label, default: 0] += 1
+        scheduleUISync()
         store.scheduleSave()
     }
 
@@ -174,7 +177,7 @@ final class AppState: ObservableObject {
             self.syncPublishedStats()
         }
         uiSyncWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + mouseUISyncInterval, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + uiSyncInterval, execute: work)
     }
 
     /// Force une synchro UI immédiate (arrêt, changement de jour, etc.).
@@ -250,11 +253,10 @@ final class AppState: ObservableObject {
         let todayStats = store.stats(for: currentDayKey)
         if let index = history.firstIndex(where: { $0.date == currentDayKey }) {
             guard history[index] != todayStats else { return }
-            var updated = history
-            updated[index] = todayStats
-            history = updated
+            history[index] = todayStats
         } else {
             history = store.days.values.sorted { $0.date < $1.date }
+            globalKeyCounts = history.aggregatedKeyCounts
         }
     }
 

@@ -25,7 +25,7 @@ struct DashboardView: View {
                 TodayView(state: state)
                     .tabItem { Label("Today", systemImage: "calendar") }
 
-                HistoryChartView(history: state.history)
+                HistoryChartView(history: state.history, keyCounts: state.globalKeyCounts)
                     .tabItem { Label("History", systemImage: "chart.bar.xaxis") }
 
                 AchievementsView(state: state)

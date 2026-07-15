@@ -118,6 +118,9 @@ private enum HistoryMetric: String, CaseIterable, Identifiable {
 /// Graphiques d'historique : résumé, tendance par métrique, détail jour par jour.
 struct HistoryChartView: View {
     let history: [DayStats]
+    /// Compteurs de touches cumulés (cache fourni par AppState, jamais
+    /// recalculé ici pour éviter un merge complet à chaque render).
+    let keyCounts: [String: Int]
     @ObservedObject private var units = UnitPreferences.shared
     @State private var selectedMetric: HistoryMetric = .keystrokes
 
@@ -137,7 +140,7 @@ struct HistoryChartView: View {
 
                     trendSection
 
-                    if !history.aggregatedKeyCounts.isEmpty {
+                    if !keyCounts.isEmpty {
                         allTimeKeysSection
                     }
 
@@ -257,7 +260,7 @@ struct HistoryChartView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Most used keys (all time)")
                 .font(.headline)
-            KeyFrequencyView(keyCounts: history.aggregatedKeyCounts)
+            KeyFrequencyView(keyCounts: keyCounts)
         }
     }
 
