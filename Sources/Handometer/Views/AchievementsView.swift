@@ -33,7 +33,6 @@ struct AchievementsView: View {
                             .font(.headline)
 
                         AchievementCardView(unlock: latest)
-                            .frame(maxWidth: 480)
                             .clipShape(RoundedRectangle(cornerRadius: 12))
                             .shadow(radius: 8)
 

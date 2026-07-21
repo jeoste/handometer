@@ -3,6 +3,11 @@ import Combine
 
 /// État observable central : relie le moniteur d'événements, le stockage et
 /// l'interface SwiftUI.
+///
+/// Les stats sont **toujours** enregistrées. Les publications `@Published` vers
+/// SwiftUI ne partent que lorsqu'au moins une vue a appelé `retainUI()` —
+/// sinon chaque tick souris reconstruit des milliers de `Label`/`Image` qui
+/// s'accumulent en RAM (observé : ~365k nœuds / ~670 Mo après quelques jours).
 @MainActor
 final class AppState: ObservableObject {
     private let store = StatsStore()
@@ -12,10 +17,20 @@ final class AppState: ObservableObject {
 
     /// Clé du jour courant.
     @Published private(set) var currentDayKey: String = Date().dayKey
-    /// Stats du jour courant (publiées pour l'UI).
-    @Published private(set) var today: DayStats
+
+    /// Compteur de révision des stats : les vues qui lisent `today` / `history`
+    /// s'abonnent via `@ObservedObject` et se rafraîchissent quand il change.
+    /// Les données elles-mêmes vivent dans des storages non-`@Published` pour
+    /// pouvoir les mettre à jour en silence (menu bar, arrière-plan).
+    @Published private(set) var statsRevision: UInt = 0
+
+    private var historyStorage: [DayStats] = []
+
+    /// Stats du jour courant — toujours lues depuis le store (à jour même
+    /// sans consommateur UI / sans publication SwiftUI).
+    var today: DayStats { store.stats(for: currentDayKey) }
     /// Historique trié par date croissante (pour les graphiques).
-    @Published private(set) var history: [DayStats] = []
+    var history: [DayStats] { historyStorage }
 
     /// État de la permission Accessibilité (TCC).
     @Published var isTrusted: Bool = Permissions.isTrusted
@@ -38,13 +53,24 @@ final class AppState: ObservableObject {
     private var permissionTimer: Timer?
     private var leaderboardTimer: Timer?
     private var uiSyncWorkItem: DispatchWorkItem?
+    private var heavySyncWorkItem: DispatchWorkItem?
     private var isRunning = false
+    private var terminateObserver: NSObjectProtocol?
 
-    /// Intervalle minimum entre deux rafraîchissements UI (souris, clics et
-    /// frappes). Les événements sont toujours enregistrés ; seule la
-    /// publication SwiftUI est limitée pour éviter des centaines de re-rendus
-    /// et d'évaluations d'achievements par seconde.
-    private let uiSyncInterval: TimeInterval = 0.5
+    /// Nombre de fenêtres / menus qui observent l'état.
+    private var uiConsumerCount = 0
+
+    /// Intervalle minimum entre deux publications UI « légères » (`today`).
+    private let uiSyncInterval: TimeInterval = 1.0
+    /// Intervalle pour historique + évaluation des achievements (plus coûteux).
+    private let heavySyncInterval: TimeInterval = 5.0
+
+    /// Totaux lifetime mis à jour de façon incrémentale (évite de re-parcourir
+    /// tout l'historique à chaque calcul de `playerLevel`).
+    private var lifetimeKeystrokes = 0
+    private var lifetimeMouseDistanceCm = 0.0
+    private var lifetimeClicks = 0
+    private var achievementBonusXP = 0.0
 
     /// Horodatage du dernier événement souris, pour calculer la vitesse.
     private var lastMouseTimestamp: TimeInterval?
@@ -56,16 +82,36 @@ final class AppState: ObservableObject {
 
     init() {
         let key = Date().dayKey
-        self.today = store.stats(for: key)
-        refreshHistory()
+        refreshHistoryStorage()
+        rebuildLifetimeTotals()
         syncAchievementsFromStore()
         _ = achievementStore.retroactiveScan(
-            history: history,
+            history: historyStorage,
             globalKeyCounts: globalKeyCounts,
             currentDayKey: key
         )
         syncAchievementsFromStore()
+        rebuildAchievementBonusXP()
         configureMonitor()
+    }
+
+    /// Indique qu'une vue SwiftUI observe cet état (dashboard, réglages, menu).
+    func retainUI() {
+        uiConsumerCount += 1
+        if uiConsumerCount == 1 {
+            syncPublishedStats(forceHeavy: true)
+        }
+    }
+
+    /// Libère un consommateur UI. En arrière-plan pur, plus de publications.
+    func releaseUI() {
+        uiConsumerCount = max(0, uiConsumerCount - 1)
+        if uiConsumerCount == 0 {
+            uiSyncWorkItem?.cancel()
+            uiSyncWorkItem = nil
+            heavySyncWorkItem?.cancel()
+            heavySyncWorkItem = nil
+        }
     }
 
     func start() {
@@ -81,7 +127,7 @@ final class AppState: ObservableObject {
         recoverAccessibilityIfNeeded(afterUpdate: didUpdate)
 
         // Sauvegarde garantie à la fermeture de l'app.
-        NotificationCenter.default.addObserver(
+        terminateObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification,
             object: nil,
             queue: .main
@@ -111,24 +157,35 @@ final class AppState: ObservableObject {
         dayCheckTimer?.invalidate()
         permissionTimer?.invalidate()
         leaderboardTimer?.invalidate()
-        flushUISync()
+        dayCheckTimer = nil
+        permissionTimer = nil
+        leaderboardTimer = nil
+        heavySyncWorkItem?.cancel()
+        heavySyncWorkItem = nil
+        uiSyncWorkItem?.cancel()
+        uiSyncWorkItem = nil
+        if let terminateObserver {
+            NotificationCenter.default.removeObserver(terminateObserver)
+            self.terminateObserver = nil
+        }
+        refreshHistoryStorage()
         store.saveNow()
         achievementStore.saveNow()
+        isRunning = false
     }
 
     var storageURL: URL { store.storageURL }
     var allDays: [String: DayStats] { store.days }
 
     /// Nombre total de frappes sur toutes les journées enregistrées.
-    var totalKeystrokes: Int { history.totalKeystrokes }
+    var totalKeystrokes: Int { lifetimeKeystrokes }
 
     /// Niveau de progression, dérivé des stats cumulées + bonus d'achievements.
     var playerLevel: PlayerLevel {
-        let base = Double(history.totalKeystrokes) * PlayerLevel.xpPerKeystroke
-            + history.totalMouseDistanceCm * PlayerLevel.xpPerCm
-            + Double(history.totalClicks) * PlayerLevel.xpPerClick
-        let bonus = achievements.reduce(0.0) { $0 + $1.definition.tier.xpBonus }
-        return PlayerLevel(lifetimeXP: base + bonus + Double(Leaderboard.trophyXP))
+        let base = Double(lifetimeKeystrokes) * PlayerLevel.xpPerKeystroke
+            + lifetimeMouseDistanceCm * PlayerLevel.xpPerCm
+            + Double(lifetimeClicks) * PlayerLevel.xpPerClick
+        return PlayerLevel(lifetimeXP: base + achievementBonusXP + Double(Leaderboard.trophyXP))
     }
 
     // MARK: - Configuration du moniteur
@@ -168,6 +225,7 @@ final class AppState: ObservableObject {
         lastMouseTimestamp = timestamp
 
         store.recordMovement(distanceCm: cm, seconds: seconds, instantKmh: instantKmh, to: currentDayKey)
+        lifetimeMouseDistanceCm += cm
         scheduleUISync()
         store.scheduleSave()
     }
@@ -175,6 +233,7 @@ final class AppState: ObservableObject {
     private func recordClick(_ button: MouseButton) {
         checkDayRollover()
         store.incrementClick(button, in: currentDayKey)
+        lifetimeClicks += 1
         scheduleUISync()
         store.scheduleSave()
     }
@@ -183,37 +242,67 @@ final class AppState: ObservableObject {
         checkDayRollover()
         store.incrementKey(label, in: currentDayKey)
         globalKeyCounts[label, default: 0] += 1
+        lifetimeKeystrokes += 1
         scheduleUISync()
         store.scheduleSave()
     }
 
     /// Planifie une synchro UI débouncée (mouvements souris à haute fréquence).
     private func scheduleUISync() {
+        guard uiConsumerCount > 0 else { return }
         guard uiSyncWorkItem == nil else { return }
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.uiSyncWorkItem = nil
-            self.syncPublishedStats()
+            self.syncPublishedStats(forceHeavy: false)
         }
         uiSyncWorkItem = work
         DispatchQueue.main.asyncAfter(deadline: .now() + uiSyncInterval, execute: work)
     }
 
-    /// Force une synchro UI immédiate (arrêt, changement de jour, etc.).
-    private func flushUISync() {
-        uiSyncWorkItem?.cancel()
-        uiSyncWorkItem = nil
-        syncPublishedStats()
+    private func syncPublishedStats(forceHeavy: Bool) {
+        // Les vues relisent `today` depuis le store après ce bump.
+        bumpStatsRevision()
+
+        if forceHeavy {
+            heavySyncWorkItem?.cancel()
+            heavySyncWorkItem = nil
+            refreshHistoryStorage()
+            bumpStatsRevision()
+            evaluateAchievements()
+            return
+        }
+
+        guard heavySyncWorkItem == nil else { return }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.heavySyncWorkItem = nil
+            guard self.uiConsumerCount > 0 else { return }
+            self.refreshHistoryStorage()
+            self.bumpStatsRevision()
+            self.evaluateAchievements()
+        }
+        heavySyncWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + heavySyncInterval, execute: work)
     }
 
-    private func syncPublishedStats() {
-        today = store.stats(for: currentDayKey)
-        refreshHistory()
-        evaluateAchievements()
+    private func bumpStatsRevision() {
+        guard uiConsumerCount > 0 else { return }
+        statsRevision &+= 1
     }
 
     private func syncAchievementsFromStore() {
         achievements = achievementStore.unlocks.sorted { $0.unlockedAt > $1.unlockedAt }
+    }
+
+    private func rebuildLifetimeTotals() {
+        lifetimeKeystrokes = historyStorage.totalKeystrokes
+        lifetimeMouseDistanceCm = historyStorage.totalMouseDistanceCm
+        lifetimeClicks = historyStorage.totalClicks
+    }
+
+    private func rebuildAchievementBonusXP() {
+        achievementBonusXP = achievements.reduce(0.0) { $0 + $1.definition.tier.xpBonus }
     }
 
     func achievements(for scope: AchievementScope) -> [UnlockedAchievement] {
@@ -228,7 +317,7 @@ final class AppState: ObservableObject {
     private func evaluateAchievements() {
         let newUnlocks = AchievementEvaluator.evaluate(
             today: today,
-            history: history,
+            history: historyStorage,
             globalKeyCounts: globalKeyCounts,
             alreadyUnlockedKeys: achievementStore.unlockedKeys,
             currentDayKey: currentDayKey
@@ -237,8 +326,8 @@ final class AppState: ObservableObject {
         guard !added.isEmpty else { return }
 
         syncAchievementsFromStore()
-
         for unlock in added {
+            achievementBonusXP += unlock.definition.tier.xpBonus
             AchievementNotifier.notify(unlock: unlock)
         }
 
@@ -264,18 +353,19 @@ final class AppState: ObservableObject {
         guard key != currentDayKey else { return }
         store.saveNow()
         currentDayKey = key
-        today = store.stats(for: key)
-        refreshHistory()
+        refreshHistoryStorage()
+        bumpStatsRevision()
     }
 
-    private func refreshHistory() {
+    private func refreshHistoryStorage() {
         let todayStats = store.stats(for: currentDayKey)
-        if let index = history.firstIndex(where: { $0.date == currentDayKey }) {
-            guard history[index] != todayStats else { return }
-            history[index] = todayStats
+        if let index = historyStorage.firstIndex(where: { $0.date == currentDayKey }) {
+            guard historyStorage[index] != todayStats else { return }
+            historyStorage[index] = todayStats
         } else {
-            history = store.days.values.sorted { $0.date < $1.date }
-            globalKeyCounts = history.aggregatedKeyCounts
+            historyStorage = store.days.values.sorted { $0.date < $1.date }
+            globalKeyCounts = historyStorage.aggregatedKeyCounts
+            rebuildLifetimeTotals()
         }
     }
 
@@ -350,7 +440,7 @@ final class AppState: ObservableObject {
     }
 
     func refresh() {
-        today = store.stats(for: currentDayKey)
-        refreshHistory()
+        refreshHistoryStorage()
+        bumpStatsRevision()
     }
 }

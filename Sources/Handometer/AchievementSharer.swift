@@ -6,7 +6,7 @@ enum AchievementSharer {
     static let cardSize = CGSize(width: 1200, height: 675)
 
     static func renderImage(for unlock: UnlockedAchievement) -> NSImage? {
-        let view = AchievementCardView(unlock: unlock)
+        let view = AchievementCardView(unlock: unlock, forShare: true)
         let renderer = ImageRenderer(content: view)
         renderer.proposedSize = ProposedViewSize(cardSize)
         renderer.scale = 2

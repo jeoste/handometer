@@ -23,6 +23,8 @@ struct SettingsView: View {
                 .tag(SettingsTab.about)
         }
         .frame(width: 420, height: 400)
+        .onAppear { state.retainUI() }
+        .onDisappear { state.releaseUI() }
     }
 }
 

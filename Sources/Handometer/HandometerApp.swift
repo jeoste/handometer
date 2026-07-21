@@ -93,7 +93,6 @@ struct MenuBarContent: View {
     @State private var stats = MenuBarStatsSnapshot()
     @State private var isTrusted = Permissions.isTrusted
     @State private var needsAccessibilityRegrant = false
-    @State private var refreshTimer: Timer?
     @ObservedObject private var units = UnitPreferences.shared
 
     var body: some View {
@@ -142,24 +141,10 @@ struct MenuBarContent: View {
             Button("Quit") { NSApp.terminate(nil) }
                 .keyboardShortcut("q")
         }
-        .onAppear { startMenuRefresh() }
-        .onDisappear { stopMenuRefresh() }
+        // Snapshot à l'ouverture uniquement — pas de timer 1 Hz (fuite SwiftUI).
+        .onAppear { refreshFromState() }
         .onChange(of: units.distanceUnit) { _ in refreshFromState() }
         .onChange(of: units.speedUnit) { _ in refreshFromState() }
-    }
-
-    @MainActor
-    private func startMenuRefresh() {
-        refreshFromState()
-        refreshTimer?.invalidate()
-        refreshTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-            Task { @MainActor in refreshFromState() }
-        }
-    }
-
-    private func stopMenuRefresh() {
-        refreshTimer?.invalidate()
-        refreshTimer = nil
     }
 
     @MainActor

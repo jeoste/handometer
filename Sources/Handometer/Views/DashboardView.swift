@@ -42,7 +42,13 @@ struct DashboardView: View {
             footer
         }
         .frame(minWidth: 520, minHeight: 460)
-        .onAppear { state.refresh() }
+        .onAppear {
+            state.retainUI()
+            state.refresh()
+        }
+        .onDisappear {
+            state.releaseUI()
+        }
     }
 
     private var permissionBanner: some View {
