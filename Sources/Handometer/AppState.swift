@@ -4,10 +4,12 @@ import Combine
 /// État observable central : relie le moniteur d'événements, le stockage et
 /// l'interface SwiftUI.
 ///
-/// Les stats sont **toujours** enregistrées. Les publications `@Published` vers
-/// SwiftUI ne partent que lorsqu'au moins une vue a appelé `retainUI()` —
-/// sinon chaque tick souris reconstruit des milliers de `Label`/`Image` qui
-/// s'accumulent en RAM (observé : ~365k nœuds / ~670 Mo après quelques jours).
+/// Les stats sont **toujours** enregistrées, et les achievements **toujours**
+/// évalués (sinon rien ne se débloque tant que le dashboard reste fermé).
+/// Seules les publications `@Published` périodiques vers SwiftUI attendent
+/// qu'au moins une vue ait appelé `retainUI()` — sinon chaque tick souris
+/// reconstruit des milliers de `Label`/`Image` qui s'accumulent en RAM
+/// (observé : ~365k nœuds / ~670 Mo après quelques jours).
 @MainActor
 final class AppState: ObservableObject {
     private let store = StatsStore()
@@ -53,7 +55,7 @@ final class AppState: ObservableObject {
     private var permissionTimer: Timer?
     private var leaderboardTimer: Timer?
     private var uiSyncWorkItem: DispatchWorkItem?
-    private var heavySyncWorkItem: DispatchWorkItem?
+    private var achievementSyncWorkItem: DispatchWorkItem?
     private var isRunning = false
     private var terminateObserver: NSObjectProtocol?
 
@@ -63,7 +65,7 @@ final class AppState: ObservableObject {
     /// Intervalle minimum entre deux publications UI « légères » (`today`).
     private let uiSyncInterval: TimeInterval = 1.0
     /// Intervalle pour historique + évaluation des achievements (plus coûteux).
-    private let heavySyncInterval: TimeInterval = 5.0
+    private let achievementSyncInterval: TimeInterval = 5.0
 
     /// Totaux lifetime mis à jour de façon incrémentale (évite de re-parcourir
     /// tout l'historique à chaque calcul de `playerLevel`).
@@ -99,18 +101,19 @@ final class AppState: ObservableObject {
     func retainUI() {
         uiConsumerCount += 1
         if uiConsumerCount == 1 {
-            syncPublishedStats(forceHeavy: true)
+            achievementSyncWorkItem?.cancel()
+            achievementSyncWorkItem = nil
+            syncHistoryAndAchievements()
         }
     }
 
-    /// Libère un consommateur UI. En arrière-plan pur, plus de publications.
+    /// Libère un consommateur UI. En arrière-plan pur, plus de publications
+    /// périodiques — mais les achievements continuent d'être évalués.
     func releaseUI() {
         uiConsumerCount = max(0, uiConsumerCount - 1)
         if uiConsumerCount == 0 {
             uiSyncWorkItem?.cancel()
             uiSyncWorkItem = nil
-            heavySyncWorkItem?.cancel()
-            heavySyncWorkItem = nil
         }
     }
 
@@ -160,8 +163,8 @@ final class AppState: ObservableObject {
         dayCheckTimer = nil
         permissionTimer = nil
         leaderboardTimer = nil
-        heavySyncWorkItem?.cancel()
-        heavySyncWorkItem = nil
+        achievementSyncWorkItem?.cancel()
+        achievementSyncWorkItem = nil
         uiSyncWorkItem?.cancel()
         uiSyncWorkItem = nil
         if let terminateObserver {
@@ -226,7 +229,7 @@ final class AppState: ObservableObject {
 
         store.recordMovement(distanceCm: cm, seconds: seconds, instantKmh: instantKmh, to: currentDayKey)
         lifetimeMouseDistanceCm += cm
-        scheduleUISync()
+        scheduleSync()
         store.scheduleSave()
     }
 
@@ -234,7 +237,7 @@ final class AppState: ObservableObject {
         checkDayRollover()
         store.incrementClick(button, in: currentDayKey)
         lifetimeClicks += 1
-        scheduleUISync()
+        scheduleSync()
         store.scheduleSave()
     }
 
@@ -243,47 +246,52 @@ final class AppState: ObservableObject {
         store.incrementKey(label, in: currentDayKey)
         globalKeyCounts[label, default: 0] += 1
         lifetimeKeystrokes += 1
-        scheduleUISync()
+        scheduleSync()
         store.scheduleSave()
     }
 
-    /// Planifie une synchro UI débouncée (mouvements souris à haute fréquence).
-    private func scheduleUISync() {
+    /// Planifie les deux synchros débouncées après un événement (les mouvements
+    /// souris arrivent à ~100 Hz) : publication SwiftUI et évaluation des
+    /// achievements, sur des cadences et des conditions indépendantes.
+    private func scheduleSync() {
+        schedulePublish()
+        scheduleAchievementSync()
+    }
+
+    /// Publication « légère » : bump de révision pour que les vues relisent
+    /// `today` depuis le store. Sans consommateur UI, rien à publier.
+    private func schedulePublish() {
         guard uiConsumerCount > 0 else { return }
         guard uiSyncWorkItem == nil else { return }
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.uiSyncWorkItem = nil
-            self.syncPublishedStats(forceHeavy: false)
+            self.bumpStatsRevision()
         }
         uiSyncWorkItem = work
         DispatchQueue.main.asyncAfter(deadline: .now() + uiSyncInterval, execute: work)
     }
 
-    private func syncPublishedStats(forceHeavy: Bool) {
-        // Les vues relisent `today` depuis le store après ce bump.
-        bumpStatsRevision()
-
-        if forceHeavy {
-            heavySyncWorkItem?.cancel()
-            heavySyncWorkItem = nil
-            refreshHistoryStorage()
-            bumpStatsRevision()
-            evaluateAchievements()
-            return
-        }
-
-        guard heavySyncWorkItem == nil else { return }
+    /// Tourne **aussi** sans fenêtre ouverte : sinon aucun achievement ne se
+    /// débloque, et le bonus d'XP n'arrive que par paliers, à l'ouverture du
+    /// dashboard. Sans consommateur UI, `bumpStatsRevision()` est un no-op et
+    /// `evaluateAchievements()` ne publie que s'il débloque réellement quelque
+    /// chose : pas de re-rendu périodique, donc pas de fuite de view graph.
+    private func scheduleAchievementSync() {
+        guard achievementSyncWorkItem == nil else { return }
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            self.heavySyncWorkItem = nil
-            guard self.uiConsumerCount > 0 else { return }
-            self.refreshHistoryStorage()
-            self.bumpStatsRevision()
-            self.evaluateAchievements()
+            self.achievementSyncWorkItem = nil
+            self.syncHistoryAndAchievements()
         }
-        heavySyncWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + heavySyncInterval, execute: work)
+        achievementSyncWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + achievementSyncInterval, execute: work)
+    }
+
+    private func syncHistoryAndAchievements() {
+        refreshHistoryStorage()
+        bumpStatsRevision()
+        evaluateAchievements()
     }
 
     private func bumpStatsRevision() {
