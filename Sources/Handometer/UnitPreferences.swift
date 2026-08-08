@@ -94,13 +94,6 @@ final class UnitPreferences: ObservableObject {
         }
     }
 
-    var chartDistanceLabel: String {
-        switch distanceUnit {
-        case .meters: return "m"
-        case .steps:  return "steps"
-        }
-    }
-
     var chartDistanceSectionTitle: String {
         switch distanceUnit {
         case .meters: return "Mouse distance per day (m)"
@@ -137,11 +130,6 @@ final class UnitPreferences: ObservableObject {
         }
     }
 
-    /// Libellé compact pour l'axe Y des graphiques de vitesse.
-    func formatChartSpeedAxis(_ value: Double) -> String {
-        String(format: "%.0f", value)
-    }
-
     /// Libellé compact pour les compteurs (frappes, clics).
     func formatChartCountAxis(_ value: Double) -> String {
         if value >= 10_000 { return String(format: "%.0fk", value / 1_000) }
@@ -156,6 +144,12 @@ final class UnitPreferences: ObservableObject {
     }
 
     static func mph(fromKmh kmh: Double) -> Double {
-        kmh / 1.609344
+        kmh / Self.kmPerMile
     }
+
+    static func kmh(fromMph mph: Double) -> Double {
+        mph * Self.kmPerMile
+    }
+
+    private static let kmPerMile = 1.609344
 }

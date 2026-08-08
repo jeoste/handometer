@@ -11,35 +11,20 @@ private enum HistoryMetric: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    var label: String {
+    /// Tokens d'affichage, en un seul switch exhaustif.
+    private var tokens: (label: String, systemImage: String, color: Color) {
         switch self {
-        case .distance:     return "Distance"
-        case .keystrokes:   return "Keys"
-        case .clicks:       return "Clicks"
-        case .averageSpeed: return "Avg"
-        case .maxSpeed:     return "Max"
+        case .distance:     return ("Distance", "cursorarrow.motionlines", .blue)
+        case .keystrokes:   return ("Keys", "keyboard", .green)
+        case .clicks:       return ("Clicks", "cursorarrow.click", .purple)
+        case .averageSpeed: return ("Avg", "gauge.with.dots.needle.50percent", .teal)
+        case .maxSpeed:     return ("Max", "speedometer", .orange)
         }
     }
 
-    var systemImage: String {
-        switch self {
-        case .distance:     return "cursorarrow.motionlines"
-        case .keystrokes:   return "keyboard"
-        case .clicks:       return "cursorarrow.click"
-        case .averageSpeed: return "gauge.with.dots.needle.50percent"
-        case .maxSpeed:     return "speedometer"
-        }
-    }
-
-    var color: Color {
-        switch self {
-        case .distance:     return .blue
-        case .keystrokes:   return .green
-        case .clicks:       return .purple
-        case .averageSpeed: return .teal
-        case .maxSpeed:     return .orange
-        }
-    }
+    var label: String { tokens.label }
+    var systemImage: String { tokens.systemImage }
+    var color: Color { tokens.color }
 
     func chartValue(for day: DayStats, units: UnitPreferences) -> Double {
         switch self {
@@ -63,7 +48,7 @@ private enum HistoryMetric: String, CaseIterable, Identifiable {
         case .keystrokes, .clicks:
             return units.formatChartCountAxis(value)
         case .averageSpeed, .maxSpeed:
-            return "\(units.formatChartSpeedAxis(value)) \(units.chartSpeedLabel)"
+            return String(format: "%.0f %@", value, units.chartSpeedLabel)
         }
     }
 
@@ -81,7 +66,7 @@ private enum HistoryMetric: String, CaseIterable, Identifiable {
         case .clicks:
             return "\(Int(value)) clicks"
         case .averageSpeed, .maxSpeed:
-            let kmh = units.speedUnit == .mph ? value * 1.609344 : value
+            let kmh = units.speedUnit == .mph ? UnitPreferences.kmh(fromMph: value) : value
             return units.formatSpeed(kmh: kmh)
         }
     }
@@ -102,17 +87,6 @@ private enum HistoryMetric: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Identifiant de rafraîchissement quand les unités changent.
-    func unitsRefreshID(units: UnitPreferences) -> String {
-        switch self {
-        case .distance:
-            return units.distanceUnit.rawValue
-        case .averageSpeed, .maxSpeed:
-            return units.speedUnit.rawValue
-        case .keystrokes, .clicks:
-            return "count"
-        }
-    }
 }
 
 /// Graphiques d'historique : résumé, tendance par métrique, détail jour par jour.
@@ -146,7 +120,8 @@ struct HistoryChartView: View {
                         allTimeKeysSection
                     }
 
-                    section(title: "Daily breakdown") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Daily breakdown").font(.headline)
                         ForEach(history.reversed(), id: \.date) { day in
                             DayHistoryRow(day: day)
                         }
@@ -298,7 +273,6 @@ struct HistoryChartView: View {
                 .chartPlotStyle { plot in
                     plot.padding(.horizontal, 4)
                 }
-                .id(selectedMetric.unitsRefreshID(units: units))
                 .frame(height: 240)
             }
             .padding()
@@ -320,14 +294,6 @@ struct HistoryChartView: View {
 
     private func chartDate(from dayKey: String) -> Date {
         DateFormatter.dayKey.date(from: dayKey) ?? .distantPast
-    }
-
-    @ViewBuilder
-    private func section<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.headline)
-            content()
-        }
     }
 }
 

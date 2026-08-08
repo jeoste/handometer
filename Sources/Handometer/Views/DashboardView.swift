@@ -42,10 +42,7 @@ struct DashboardView: View {
             footer
         }
         .frame(minWidth: 520, minHeight: 460)
-        .onAppear {
-            state.retainUI()
-            state.refresh()
-        }
+        .onAppear { state.retainUI() }
         .onDisappear {
             state.releaseUI()
         }

@@ -1,12 +1,5 @@
 import AppKit
 
-/// Bouton de souris cliqué.
-enum MouseButton {
-    case left
-    case right
-    case middle
-}
-
 /// Surveille globalement les mouvements de souris, les clics et les frappes
 /// clavier.
 ///

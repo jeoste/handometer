@@ -1,5 +1,12 @@
 import Foundation
 
+/// Bouton de souris cliqué.
+enum MouseButton {
+    case left
+    case right
+    case middle
+}
+
 /// Statistiques agrégées pour un jour donné.
 ///
 /// Pour des raisons de vie privée, on ne stocke que des **compteurs par
@@ -49,15 +56,12 @@ struct DayStats: Codable, Equatable {
         keyCounts.values.reduce(0, +)
     }
 
-    /// Fusionne les compteurs de touches de plusieurs journées.
-    static func aggregatedKeyCounts(from days: some Collection<DayStats>) -> [String: Int] {
-        var merged: [String: Int] = [:]
-        for day in days {
-            for (key, count) in day.keyCounts {
-                merged[key, default: 0] += count
-            }
-        }
-        return merged
+    /// Ajoute un segment de déplacement. `mutating` pour que le store puisse
+    /// muter la journée en place, sans copier `keyCounts`.
+    mutating func addMovement(distanceCm: Double, seconds: Double, instantKmh: Double) {
+        mouseDistanceCm += distanceCm
+        if seconds > 0 { movementSeconds += seconds }
+        if instantKmh > maxSpeedKmh { maxSpeedKmh = instantKmh }
     }
 
     /// Nombre total de clics (gauche + droit + molette).
@@ -105,7 +109,13 @@ extension Collection where Element == DayStats {
 
     /// Compteurs de touches cumulés sur toutes les journées.
     var aggregatedKeyCounts: [String: Int] {
-        DayStats.aggregatedKeyCounts(from: self)
+        var merged: [String: Int] = [:]
+        for day in self {
+            for (key, count) in day.keyCounts {
+                merged[key, default: 0] += count
+            }
+        }
+        return merged
     }
 
     /// Nombre total de clics sur toutes les journées.
@@ -156,5 +166,17 @@ extension Date {
     /// Clé de jour `YYYY-MM-DD` correspondant à cette date en heure locale.
     var dayKey: String {
         DateFormatter.dayKey.string(from: self)
+    }
+
+    /// Minuit local suivant. Via `Calendar`, pas `+86 400` : les jours de
+    /// changement d'heure font 23 ou 25 h, et un décalage constant ferait
+    /// dériver la borne d'une heure à chaque transition.
+    var nextMidnight: Date {
+        let calendar = Calendar.current
+        return calendar.nextDate(
+            after: self,
+            matching: DateComponents(hour: 0, minute: 0, second: 0),
+            matchingPolicy: .nextTime
+        ) ?? addingTimeInterval(86_400)
     }
 }

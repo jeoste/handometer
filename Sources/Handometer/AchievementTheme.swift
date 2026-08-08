@@ -15,53 +15,22 @@ enum AchievementCategory: String, Codable, CaseIterable {
     case streak
     case exotic
 
-    /// Couleur néon principale de la catégorie.
-    var accent: Color {
+    /// Tokens de la catégorie, en un seul switch exhaustif. L'ordre d'affichage
+    /// des sections est l'ordre de déclaration (`allCases`).
+    private var tokens: (accent: Color, label: String, systemImage: String) {
         switch self {
-        case .keyboard: return Color(red: 0.13, green: 0.92, blue: 0.98) // cyan électrique
-        case .mouse:    return Color(red: 0.98, green: 0.20, blue: 0.66) // magenta néon
-        case .clicks:   return Color(red: 0.46, green: 0.98, blue: 0.32) // vert lime
-        case .speed:    return Color(red: 0.99, green: 0.82, blue: 0.16) // ambre néon
-        case .streak:   return Color(red: 0.99, green: 0.44, blue: 0.14) // orange flamme
-        case .exotic:   return Color(red: 0.72, green: 0.36, blue: 0.99) // violet ovni
+        case .keyboard: return (Color(red: 0.13, green: 0.92, blue: 0.98), "KEYBOARD", "keyboard.fill")          // cyan électrique
+        case .mouse:    return (Color(red: 0.98, green: 0.20, blue: 0.66), "MOUSE", "cursorarrow.motionlines")   // magenta néon
+        case .clicks:   return (Color(red: 0.46, green: 0.98, blue: 0.32), "CLICKS", "cursorarrow.click.2")      // vert lime
+        case .speed:    return (Color(red: 0.99, green: 0.82, blue: 0.16), "SPEED", "bolt.fill")                 // ambre néon
+        case .streak:   return (Color(red: 0.99, green: 0.44, blue: 0.14), "STREAK", "flame.fill")               // orange flamme
+        case .exotic:   return (Color(red: 0.72, green: 0.36, blue: 0.99), "EXOTIC", "sparkles")                 // violet ovni
         }
     }
 
-    /// Libellé court affiché sur les cartes / sections.
-    var label: String {
-        switch self {
-        case .keyboard: return "KEYBOARD"
-        case .mouse:    return "MOUSE"
-        case .clicks:   return "CLICKS"
-        case .speed:    return "SPEED"
-        case .streak:   return "STREAK"
-        case .exotic:   return "EXOTIC"
-        }
-    }
-
-    /// Icône SF Symbol par défaut de la catégorie.
-    var systemImage: String {
-        switch self {
-        case .keyboard: return "keyboard.fill"
-        case .mouse:    return "cursorarrow.motionlines"
-        case .clicks:   return "cursorarrow.click.2"
-        case .speed:    return "bolt.fill"
-        case .streak:   return "flame.fill"
-        case .exotic:   return "sparkles"
-        }
-    }
-
-    /// Ordre d'affichage stable des sections.
-    var sortIndex: Int {
-        switch self {
-        case .keyboard: return 0
-        case .mouse:    return 1
-        case .clicks:   return 2
-        case .speed:    return 3
-        case .streak:   return 4
-        case .exotic:   return 5
-        }
-    }
+    var accent: Color { tokens.accent }
+    var label: String { tokens.label }
+    var systemImage: String { tokens.systemImage }
 }
 
 /// Palier de prestige d'un achievement. Module l'**intensité** (glow, anneau,
@@ -73,60 +42,25 @@ enum AchievementTier: String, Codable, CaseIterable {
     case platinum
     case diamond
 
-    /// Libellé de rareté affiché sur le ruban.
-    var rarity: String {
+    /// Tokens du palier, en un seul switch exhaustif : libellé de rareté, reflet
+    /// métallique, facteur de halo (1 = base) et épaisseur de l'anneau.
+    private var tokens: (rarity: String, sheen: Color, glowScale: CGFloat, ringLineWidth: CGFloat) {
         switch self {
-        case .bronze:   return "COMMON"
-        case .silver:   return "RARE"
-        case .gold:     return "EPIC"
-        case .platinum: return "LEGENDARY"
-        case .diamond:  return "MYTHIC"
+        case .bronze:   return ("COMMON",    Color(red: 0.85, green: 0.55, blue: 0.30), 0.80, 6)
+        case .silver:   return ("RARE",      Color(red: 0.86, green: 0.88, blue: 0.94), 1.00, 7)
+        case .gold:     return ("EPIC",      Color(red: 0.99, green: 0.84, blue: 0.36), 1.25, 9)
+        case .platinum: return ("LEGENDARY", Color(red: 0.70, green: 0.93, blue: 0.96), 1.50, 11)
+        case .diamond:  return ("MYTHIC",    Color(red: 0.78, green: 0.72, blue: 0.99), 1.85, 13)
         }
     }
 
-    /// Reflet métallique superposé à l'accent de la catégorie.
-    var sheen: Color {
-        switch self {
-        case .bronze:   return Color(red: 0.85, green: 0.55, blue: 0.30)
-        case .silver:   return Color(red: 0.86, green: 0.88, blue: 0.94)
-        case .gold:     return Color(red: 0.99, green: 0.84, blue: 0.36)
-        case .platinum: return Color(red: 0.70, green: 0.93, blue: 0.96)
-        case .diamond:  return Color(red: 0.78, green: 0.72, blue: 0.99)
-        }
-    }
+    var rarity: String { tokens.rarity }
+    var sheen: Color { tokens.sheen }
+    var glowScale: CGFloat { tokens.glowScale }
+    var ringLineWidth: CGFloat { tokens.ringLineWidth }
 
-    /// Facteur d'intensité du halo (1 = base).
-    var glowScale: CGFloat {
-        switch self {
-        case .bronze:   return 0.8
-        case .silver:   return 1.0
-        case .gold:     return 1.25
-        case .platinum: return 1.5
-        case .diamond:  return 1.85
-        }
-    }
-
-    /// Épaisseur de l'anneau de la médaille (carte de partage).
-    var ringLineWidth: CGFloat {
-        switch self {
-        case .bronze:   return 6
-        case .silver:   return 7
-        case .gold:     return 9
-        case .platinum: return 11
-        case .diamond:  return 13
-        }
-    }
-
-    /// Nombre d'étoiles affichées (1…5) pour indiquer le palier.
-    var pipCount: Int {
-        switch self {
-        case .bronze:   return 1
-        case .silver:   return 2
-        case .gold:     return 3
-        case .platinum: return 4
-        case .diamond:  return 5
-        }
-    }
+    /// Nombre d'étoiles affichées (1…5) : le rang du palier.
+    var pipCount: Int { (Self.allCases.firstIndex(of: self) ?? 0) + 1 }
 }
 
 /// Combinaison `(catégorie, palier)` résolue en tokens prêts à l'emploi par les
@@ -176,17 +110,15 @@ struct BadgeStyle {
 // MARK: - Fonds & textures partagés
 
 enum AchievementBackdrop {
-    /// Fond arcade quasi-noir teinté par la couleur du badge.
-    static func gradient(tinted color: Color) -> LinearGradient {
-        LinearGradient(
-            colors: [
-                Color(red: 0.03, green: 0.03, blue: 0.07),
-                Color(red: 0.06, green: 0.04, blue: 0.12)
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
+    /// Fond arcade quasi-noir, identique pour tous les badges.
+    static let gradient = LinearGradient(
+        colors: [
+            Color(red: 0.03, green: 0.03, blue: 0.07),
+            Color(red: 0.06, green: 0.04, blue: 0.12)
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
 
     /// Nappe radiale néon centrée derrière la médaille.
     static func glow(_ color: Color, radius: CGFloat = 320) -> RadialGradient {

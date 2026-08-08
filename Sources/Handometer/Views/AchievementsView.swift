@@ -19,9 +19,7 @@ struct AchievementsView: View {
                 .filter { $0.scope == scope }
                 .map(\.category)
         )
-        return AchievementCategory.allCases
-            .filter { present.contains($0) }
-            .sorted { $0.sortIndex < $1.sortIndex }
+        return AchievementCategory.allCases.filter { present.contains($0) }
     }
 
     var body: some View {
@@ -53,11 +51,14 @@ struct AchievementsView: View {
                 .labelsHidden()
 
                 let unlocks = state.achievements(for: scope)
+                // Un seul contexte par render : il mémoïse le streak, qui était
+                // recalculé pour chaque définition de série (~93 µs pièce).
+                let context = state.metricContext
 
-                nextUpSection(unlocks: unlocks)
+                nextUpSection(unlocks: unlocks, context: context)
 
                 ForEach(categories, id: \.self) { category in
-                    categorySection(category: category, unlocks: unlocks)
+                    categorySection(category: category, unlocks: unlocks, context: context)
                 }
             }
             .padding()
@@ -72,18 +73,15 @@ struct AchievementsView: View {
 
     /// Les 3 défis verrouillés les plus proches du déblocage, pour donner un
     /// objectif immédiat.
-    private func nextUpCandidates(unlocks: [UnlockedAchievement]) -> [NextUpCandidate] {
+    private func nextUpCandidates(
+        unlocks: [UnlockedAchievement],
+        context: MetricContext
+    ) -> [NextUpCandidate] {
         let unlockedKinds = Set(unlocks.map(\.kind))
         var candidates: [NextUpCandidate] = []
         for definition in AchievementDefinition.all {
             guard definition.scope == scope, !unlockedKinds.contains(definition.kind) else { continue }
-            let progress = AchievementEvaluator.progress(
-                for: definition,
-                today: state.today,
-                history: state.history,
-                globalKeyCounts: state.globalKeyCounts,
-                currentDayKey: state.currentDayKey
-            )
+            let progress = AchievementEvaluator.progress(for: definition, context: context)
             if progress > 0 && progress < 1 {
                 candidates.append(NextUpCandidate(definition: definition, progress: progress))
             }
@@ -93,8 +91,8 @@ struct AchievementsView: View {
     }
 
     @ViewBuilder
-    private func nextUpSection(unlocks: [UnlockedAchievement]) -> some View {
-        let candidates = nextUpCandidates(unlocks: unlocks)
+    private func nextUpSection(unlocks: [UnlockedAchievement], context: MetricContext) -> some View {
+        let candidates = nextUpCandidates(unlocks: unlocks, context: context)
         if !candidates.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 8) {
@@ -120,7 +118,8 @@ struct AchievementsView: View {
     @ViewBuilder
     private func categorySection(
         category: AchievementCategory,
-        unlocks: [UnlockedAchievement]
+        unlocks: [UnlockedAchievement],
+        context: MetricContext
     ) -> some View {
         let definitions = AchievementDefinition.all
             .filter { $0.scope == scope && $0.category == category }
@@ -143,13 +142,7 @@ struct AchievementsView: View {
             LazyVGrid(columns: columns, spacing: 12) {
                 ForEach(definitions) { definition in
                     let unlock = unlocks.first { $0.kind == definition.kind }
-                    let progress = AchievementEvaluator.progress(
-                        for: definition,
-                        today: state.today,
-                        history: state.history,
-                        globalKeyCounts: state.globalKeyCounts,
-                        currentDayKey: state.currentDayKey
-                    )
+                    let progress = AchievementEvaluator.progress(for: definition, context: context)
 
                     AchievementBadgeTile(
                         definition: definition,

@@ -18,7 +18,7 @@ struct AchievementCardView: View {
 
     var body: some View {
         ZStack {
-            AchievementBackdrop.gradient(tinted: style.primaryColor)
+            AchievementBackdrop.gradient
             ArcadeGridTexture(color: style.primaryColor, spacing: 48 * (forShare ? 1 : 0.7))
             AchievementBackdrop.glow(style.glowColor, radius: 360 * scale)
 

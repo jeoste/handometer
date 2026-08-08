@@ -204,10 +204,17 @@ private struct AchievementSpec {
 struct AchievementDefinition: Identifiable {
     let kind: AchievementKind
     let scope: AchievementScope
+    /// Résolue une fois à la construction : les vues lisent `title`, `tier`…
+    /// plusieurs fois par render, on ne rejoue pas la table pour chacune.
+    private let spec: AchievementSpec
+
+    init(kind: AchievementKind, scope: AchievementScope) {
+        self.kind = kind
+        self.scope = scope
+        self.spec = Self.spec(for: kind)
+    }
 
     var id: String { "\(kind.rawValue)_\(scope.rawValue)" }
-
-    private var spec: AchievementSpec { AchievementDefinition.spec(for: kind) }
 
     var metric: AchievementMetric { spec.metric }
     var threshold: Double { spec.threshold }
@@ -217,9 +224,6 @@ struct AchievementDefinition: Identifiable {
     var systemImage: String { spec.systemImage ?? spec.category.systemImage }
 
     var badgeStyle: BadgeStyle { BadgeStyle(category: category, tier: tier) }
-
-    /// Teinte dominante — conservée pour compatibilité avec les vues.
-    var tierColor: Color { badgeStyle.primaryColor }
 
     var lockedDescription: String { metric.lockedDescription(threshold: threshold) }
 

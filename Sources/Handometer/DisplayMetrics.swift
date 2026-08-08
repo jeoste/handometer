@@ -10,6 +10,10 @@ final class DisplayMetrics {
     /// Hauteur de l'écran principal, cachée : `NSScreen.screens` alloue un
     /// array bridgé ObjC et ce chemin s'exécute à chaque événement souris.
     private var primaryScreenHeight: CGFloat?
+    /// Dernier écran résolu, avec ses bornes : `CGGetDisplaysWithPoint` coûte
+    /// ~18 µs (aller-retour window server) et ce chemin tourne à ~100 Hz. Tant
+    /// que le curseur reste sur le même écran, on ne le rappelle pas.
+    private var lastDisplay: (id: CGDirectDisplayID, bounds: CGRect)?
 
     init() {
         NotificationCenter.default.addObserver(
@@ -23,6 +27,7 @@ final class DisplayMetrics {
     @objc private func screenParametersChanged() {
         mmPerPixelCache.removeAll()
         primaryScreenHeight = nil
+        lastDisplay = nil
     }
 
     /// Convertit une distance pixel en cm pour l'écran situé sous `point`
@@ -65,10 +70,17 @@ final class DisplayMetrics {
         guard let primaryHeight = primaryScreenHeight else { return nil }
         let flipped = CGPoint(x: point.x, y: primaryHeight - point.y)
 
+        // `CGDisplayBounds` est dans le même repère (origine en haut à gauche)
+        // que le point qu'on passe à `CGGetDisplaysWithPoint`.
+        if let last = lastDisplay, last.bounds.contains(flipped) {
+            return last.id
+        }
+
         var displayID = CGDirectDisplayID()
         var count: UInt32 = 0
         let result = CGGetDisplaysWithPoint(flipped, 1, &displayID, &count)
         guard result == .success, count > 0 else { return nil }
+        lastDisplay = (displayID, CGDisplayBounds(displayID))
         return displayID
     }
 }

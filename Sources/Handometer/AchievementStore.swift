@@ -2,9 +2,13 @@ import Foundation
 
 /// Persistance des achievements débloqués dans
 /// `~/Library/Application Support/Handometer/achievements.json`.
+///
+/// Même règle que `StatsStore` : l'état vit sur le main actor, seule l'écriture
+/// disque part sur la file, à partir d'un snapshot.
+@MainActor
 final class AchievementStore {
     private let fileURL: URL
-    private let queue = DispatchQueue(label: "com.jeoste.handometer.achievements")
+    private static let ioQueue = DispatchQueue(label: "com.jeoste.handometer.achievements")
     private var saveWorkItem: DispatchWorkItem?
     private let debounceInterval: TimeInterval = 5
 
@@ -33,35 +37,39 @@ final class AchievementStore {
     }
 
     func scheduleSave() {
-        saveWorkItem?.cancel()
-        let work = DispatchWorkItem { [weak self] in self?.saveNow() }
+        guard saveWorkItem == nil else { return }
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated { self?.saveDebounced() }
+        }
         saveWorkItem = work
-        queue.asyncAfter(deadline: .now() + debounceInterval, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + debounceInterval, execute: work)
     }
 
+    /// Chemin débouncé : snapshot sur le main actor, écriture sur la file d'I/O.
+    private func saveDebounced() {
+        saveWorkItem = nil
+        let snapshot = unlocks
+        let url = fileURL
+        Self.ioQueue.async { Self.write(snapshot, to: url) }
+    }
+
+    /// Écriture immédiate **et synchrone** (arrêt de l'app).
     func saveNow() {
         saveWorkItem?.cancel()
-        let snapshot = unlocks
+        saveWorkItem = nil
+        Self.write(unlocks, to: fileURL)
+    }
+
+    private nonisolated static func write(_ unlocks: [UnlockedAchievement], to url: URL) {
         do {
             let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            encoder.outputFormatting = [.sortedKeys]
             encoder.dateEncodingStrategy = .iso8601
-            let data = try encoder.encode(snapshot)
-            try data.write(to: fileURL, options: .atomic)
+            let data = try encoder.encode(unlocks)
+            try data.write(to: url, options: .atomic)
         } catch {
             NSLog("Handometer: achievement save failed — \(error)")
         }
-    }
-
-    func isUnlocked(_ definition: AchievementDefinition, dayKey: String) -> Bool {
-        unlockedKeys.contains(uniquenessKey(for: definition, dayKey: dayKey))
-    }
-
-    func uniquenessKey(for definition: AchievementDefinition, dayKey: String) -> String {
-        if definition.scope == .daily {
-            return "\(definition.kind.rawValue)_\(definition.scope.rawValue)_\(dayKey)"
-        }
-        return "\(definition.kind.rawValue)_\(definition.scope.rawValue)"
     }
 
     /// Ajoute les nouveaux unlocks (ignore les doublons) et retourne ceux réellement ajoutés.
@@ -85,20 +93,14 @@ final class AchievementStore {
     }
 
     /// Scan rétroactif des all-time achievements (sans notification).
-    func retroactiveScan(
-        history: [DayStats],
-        globalKeyCounts: [String: Int],
-        currentDayKey: String
-    ) -> [UnlockedAchievement] {
+    @discardableResult
+    func retroactiveScan(context: MetricContext) -> [UnlockedAchievement] {
         let newUnlocks = AchievementEvaluator.evaluate(
-            today: history.last(where: { $0.date == currentDayKey }) ?? DayStats(date: currentDayKey),
-            history: history,
-            globalKeyCounts: globalKeyCounts,
+            context: context,
             alreadyUnlockedKeys: unlockedKeys,
-            currentDayKey: currentDayKey,
             includeDaily: false
         )
-        return add(newUnlocks, dayKey: currentDayKey)
+        return add(newUnlocks, dayKey: context.currentDayKey)
     }
 
     func unlocks(for scope: AchievementScope, dayKey: String) -> [UnlockedAchievement] {

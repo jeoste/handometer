@@ -76,11 +76,11 @@ private struct AboutSettingsPane: View {
                 Text("Handometer")
                     .font(.title2.bold())
 
-                Text(AppInfo.versionLine)
+                Text("Version \(AppInfo.shortVersion) (\(AppInfo.buildNumber))")
                     .font(.body)
 
-                if let builtLine = AppInfo.builtLine {
-                    Text(builtLine)
+                if let buildDate = AppInfo.buildDate {
+                    Text("Built \(buildDate)")
                         .font(.body)
                 }
 

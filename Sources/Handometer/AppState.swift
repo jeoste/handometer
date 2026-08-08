@@ -20,6 +20,11 @@ final class AppState: ObservableObject {
     /// Clé du jour courant.
     @Published private(set) var currentDayKey: String = Date().dayKey
 
+    /// Prochain minuit local. Le chemin par événement ne fait qu'une comparaison
+    /// de `Date` contre cette borne : formater la clé du jour coûtait ~1,1 µs
+    /// par événement (soit à chaque mouvement de souris), contre ~35 ns ici.
+    private var nextDayStart = Date().nextMidnight
+
     /// Compteur de révision des stats : les vues qui lisent `today` / `history`
     /// s'abonnent via `@ObservedObject` et se rafraîchissent quand il change.
     /// Les données elles-mêmes vivent dans des storages non-`@Published` pour
@@ -64,8 +69,12 @@ final class AppState: ObservableObject {
 
     /// Intervalle minimum entre deux publications UI « légères » (`today`).
     private let uiSyncInterval: TimeInterval = 1.0
-    /// Intervalle pour historique + évaluation des achievements (plus coûteux).
+    /// Intervalle pour historique + évaluation des achievements (plus coûteux),
+    /// fenêtre ouverte. Sans consommateur UI, personne ne regarde la progression :
+    /// seules les notifications de déblocage comptent, et une minute de latence
+    /// ne coûte rien.
     private let achievementSyncInterval: TimeInterval = 5.0
+    private let backgroundAchievementSyncInterval: TimeInterval = 60.0
 
     /// Totaux lifetime mis à jour de façon incrémentale (évite de re-parcourir
     /// tout l'historique à chaque calcul de `playerLevel`).
@@ -87,11 +96,12 @@ final class AppState: ObservableObject {
         refreshHistoryStorage()
         rebuildLifetimeTotals()
         syncAchievementsFromStore()
-        _ = achievementStore.retroactiveScan(
+        achievementStore.retroactiveScan(context: MetricContext(
+            today: store.stats(for: key),
             history: historyStorage,
             globalKeyCounts: globalKeyCounts,
             currentDayKey: key
-        )
+        ))
         syncAchievementsFromStore()
         rebuildAchievementBonusXP()
         configureMonitor()
@@ -140,7 +150,7 @@ final class AppState: ObservableObject {
 
         // Vérifie périodiquement le changement de jour et l'état des permissions.
         dayCheckTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.checkDayRollover() }
+            MainActor.assumeIsolated { self?.syncDayKey() }
         }
         permissionTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.pollPermissionState() }
@@ -177,7 +187,6 @@ final class AppState: ObservableObject {
         isRunning = false
     }
 
-    var storageURL: URL { store.storageURL }
     var allDays: [String: DayStats] { store.days }
 
     /// Nombre total de frappes sur toutes les journées enregistrées.
@@ -285,7 +294,8 @@ final class AppState: ObservableObject {
             self.syncHistoryAndAchievements()
         }
         achievementSyncWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + achievementSyncInterval, execute: work)
+        let delay = uiConsumerCount > 0 ? achievementSyncInterval : backgroundAchievementSyncInterval
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     private func syncHistoryAndAchievements() {
@@ -322,13 +332,20 @@ final class AppState: ObservableObject {
         pendingUnlock = nil
     }
 
-    private func evaluateAchievements() {
-        let newUnlocks = AchievementEvaluator.evaluate(
+    /// Instantané des données pour une passe d'évaluation ou un render.
+    var metricContext: MetricContext {
+        MetricContext(
             today: today,
             history: historyStorage,
             globalKeyCounts: globalKeyCounts,
-            alreadyUnlockedKeys: achievementStore.unlockedKeys,
             currentDayKey: currentDayKey
+        )
+    }
+
+    private func evaluateAchievements() {
+        let newUnlocks = AchievementEvaluator.evaluate(
+            context: metricContext,
+            alreadyUnlockedKeys: achievementStore.unlockedKeys
         )
         let added = achievementStore.add(newUnlocks, dayKey: currentDayKey)
         guard !added.isEmpty else { return }
@@ -356,7 +373,17 @@ final class AppState: ObservableObject {
 
     // MARK: - Changement de jour
 
+    /// Chemin par événement : une seule comparaison de `Date`.
     private func checkDayRollover() {
+        guard Date() >= nextDayStart else { return }
+        syncDayKey()
+    }
+
+    /// Chemin lent (timer 30 s, et au franchissement de minuit) : relit la clé
+    /// depuis le formateur et réaligne la borne. C'est ce qui rattrape un
+    /// changement de fuseau ou d'heure système, que la borne cachée ignorerait.
+    private func syncDayKey() {
+        nextDayStart = Date().nextMidnight
         let key = Date().dayKey
         guard key != currentDayKey else { return }
         store.saveNow()
@@ -445,10 +472,5 @@ final class AppState: ObservableObject {
         Permissions.openSettings()
         restartEventMonitor()
         refreshPermissionState()
-    }
-
-    func refresh() {
-        refreshHistoryStorage()
-        bumpStatsRevision()
     }
 }
