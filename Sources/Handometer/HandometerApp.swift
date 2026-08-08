@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import Combine
 
 @main
 struct HandometerApp: App {
@@ -60,10 +61,10 @@ struct HandometerApp: App {
     }()
 }
 
-/// Instantané des stats affichées dans le menu (rafraîchi périodiquement, pas à
-/// chaque événement souris/clavier, pour éviter les re-rendus qui cassent le
-/// surlignage et les clics dans `MenuBarExtra`).
-private struct MenuBarStatsSnapshot {
+/// Instantané des stats affichées dans le menu (rafraîchi à l'ouverture du
+/// menu, pas à chaque événement souris/clavier, pour éviter les re-rendus qui
+/// cassent le surlignage et les clics dans `MenuBarExtra`).
+private struct MenuBarStatsSnapshot: Equatable {
     var mouseDistance = ""
     var maxSpeed = ""
     var clicks = 0
@@ -141,17 +142,31 @@ struct MenuBarContent: View {
             Button("Quit") { NSApp.terminate(nil) }
                 .keyboardShortcut("q")
         }
-        // Snapshot à l'ouverture uniquement — pas de timer 1 Hz (fuite SwiftUI).
+        // Le `onAppear` d'un `MenuBarExtra` ne part qu'une fois, à l'installation
+        // de l'item au lancement (c'est aussi ce qui démarre le monitoring) —
+        // pas à chaque ouverture du menu. Sans le rafraîchissement ci-dessous,
+        // le menu resterait figé sur les valeurs du lancement.
         .onAppear { refreshFromState() }
+        // Une seule mise à jour par ouverture, au début du tracking : assez tôt
+        // pour que le menu s'affiche à jour, et pas de re-rendu pendant que
+        // l'utilisateur navigue dedans. Pas de timer, donc pas de fuite.
+        .onReceive(NotificationCenter.default.publisher(for: NSMenu.didBeginTrackingNotification)) { _ in
+            refreshFromState()
+        }
         .onChange(of: units.distanceUnit) { _ in refreshFromState() }
         .onChange(of: units.speedUnit) { _ in refreshFromState() }
     }
 
+    /// Recalcule l'instantané. Les affectations sont gardées par égalité : une
+    /// ouverture de menu sans nouvelle activité n'invalide aucune vue.
     @MainActor
     private func refreshFromState() {
-        stats = MenuBarStatsSnapshot(from: state.today, level: state.playerLevel)
-        isTrusted = state.isTrusted
-        needsAccessibilityRegrant = state.needsAccessibilityRegrant
+        let snapshot = MenuBarStatsSnapshot(from: state.today, level: state.playerLevel)
+        if snapshot != stats { stats = snapshot }
+        if state.isTrusted != isTrusted { isTrusted = state.isTrusted }
+        if state.needsAccessibilityRegrant != needsAccessibilityRegrant {
+            needsAccessibilityRegrant = state.needsAccessibilityRegrant
+        }
     }
 }
 
